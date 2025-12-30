@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azul - Tile Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --blue: #1e5aa8;
+            --yellow: #e6b800;
+            --red: #c41e3a;
+            --black: #2d2d2d;
+            --teal: #008b8b;
+            --bg-dark: #1a1a2e;
+            --bg-medium: #16213e;
+            --bg-light: #0f3460;
+            --gold: #ffd700;
+            --text-light: #e8e8e8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Raleway', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 50%, var(--bg-light) 100%);
+            min-height: 100vh;
+            color: var(--text-light);
+            overflow-x: hidden;
+        }
+
+        .game-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0 30px;
+            position: relative;
+        }
+
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gold) 0%, #fff 50%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+            letter-spacing: 8px;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2); }
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 15px;
+            font-size: 1.1rem;
+        }
+
+        .game-info span {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .current-player {
+            color: var(--gold);
+            font-weight: 600;
+        }
+
+        /* Factory Section */
+        .factory-section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-family: 'Cinzel', serif;
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--gold);
+            letter-spacing: 3px;
+        }
+
+        .factories-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 25px;
+        }
+
+        .factory {
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, #3a3a5a 0%, #252540 100%);
+            border-radius: 50%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            padding: 15px;
+            gap: 8px;
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.4),
+                inset 0 2px 10px rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .factory:hover {
+            transform: translateY(-5px);
+            box-shadow: 
+                0 15px 40px rgba(0, 0, 0, 0.5),
+                inset 0 2px 10px rgba(255, 255, 255, 0.15);
+        }
+
+        .center-pool {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, #4a4a6a 0%, #303050 100%);
+            border-radius: 50%;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: center;
+            padding: 20px;
+            gap: 8px;
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.5),
+                inset 0 2px 15px rgba(255, 255, 255, 0.1);
+            border: 4px solid rgba(255, 215, 0, 0.3);
+            position: relative;
+        }
+
+        .center-pool::before {
+            content: 'CENTER';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.2);
+            letter-spacing: 3px;
+            pointer-events: none;
+        }
+
+        .center-pool:not(:empty)::before {
+            display: none;
+        }
+
+        .first-player-token {
+            width: 35px;
+            height: 35px;
+            background: linear-gradient(135deg, #fff 0%, #ddd 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: var(--bg-dark);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .first-player-token:hover {
+            transform: scale(1.1);
+        }
+
+        /* Tiles */
+        .tile {
+            width: 35px;
+            height: 35px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 
+                0 3px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 2px rgba(255, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.4;
+        }
+
+        .tile::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        .tile:hover {
+            transform: scale(1.15) translateY(-3px);
+            box-shadow: 
+                0 8px 20px rgba(0, 0, 0, 0.4),
+                inset 0 1px 2px rgba(255, 255, 255, 0.3);
+        }
+
+        .tile.selected {
+            animation: pulse 0.5s ease infinite;
+            box-shadow: 0 0 20px currentColor;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1.1); }
+            50% { transform: scale(1.2); }
+        }
+
+        /* Blue tile - Floral/Snowflake pattern */
+        .tile.blue { 
+            background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%); 
+        }
+        .tile.blue::before {
+            background: 
+                radial-gradient(circle at 50% 50%, transparent 30%, rgba(255,255,255,0.3) 32%, transparent 34%),
+                radial-gradient(circle at 50% 20%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 50% 80%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 80% 50%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3) 5%, transparent 7%),
+                radial-gradient(circle at 70% 30%, rgba(255,255,255,0.3) 5%, transparent 7%),
+                radial-gradient(circle at 30% 70%, rgba(255,255,255,0.3) 5%, transparent 7%),
+                radial-gradient(circle at 70% 70%, rgba(255,255,255,0.3) 5%, transparent 7%);
+        }
+        .tile.blue::after {
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        /* Yellow tile - Sun/Star burst pattern */
+        .tile.yellow { 
+            background: linear-gradient(135deg, #FFD700 0%, #FFA000 100%); 
+        }
+        .tile.yellow::before {
+            background: 
+                conic-gradient(from 0deg at 50% 50%, 
+                    rgba(255,255,255,0.5) 0deg, transparent 30deg,
+                    rgba(255,255,255,0.5) 45deg, transparent 75deg,
+                    rgba(255,255,255,0.5) 90deg, transparent 120deg,
+                    rgba(255,255,255,0.5) 135deg, transparent 165deg,
+                    rgba(255,255,255,0.5) 180deg, transparent 210deg,
+                    rgba(255,255,255,0.5) 225deg, transparent 255deg,
+                    rgba(255,255,255,0.5) 270deg, transparent 300deg,
+                    rgba(255,255,255,0.5) 315deg, transparent 345deg,
+                    rgba(255,255,255,0.5) 360deg
+                );
+        }
+        .tile.yellow::after {
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4) 15%, transparent 20%);
+            border: 2px solid rgba(139,90,0,0.3);
+        }
+
+        /* Red tile - Diamond/Moroccan pattern */
+        .tile.red { 
+            background: linear-gradient(135deg, #F44336 0%, #C62828 100%); 
+        }
+        .tile.red::before {
+            background: 
+                linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.4) 55%, transparent 60%),
+                linear-gradient(-45deg, transparent 40%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.4) 55%, transparent 60%),
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.3) 10%, transparent 15%);
+        }
+        .tile.red::after {
+            border: 2px solid rgba(255,255,255,0.15);
+            background: 
+                linear-gradient(to right, transparent 45%, rgba(255,255,255,0.2) 50%, transparent 55%),
+                linear-gradient(to bottom, transparent 45%, rgba(255,255,255,0.2) 50%, transparent 55%);
+        }
+
+        /* Black tile - Ornate scroll pattern */
+        .tile.black { 
+            background: linear-gradient(135deg, #424242 0%, #1a1a1a 100%); 
+        }
+        .tile.black::before {
+            background: 
+                radial-gradient(ellipse at 25% 25%, rgba(255,255,255,0.2) 0%, transparent 40%),
+                radial-gradient(ellipse at 75% 75%, rgba(255,255,255,0.2) 0%, transparent 40%),
+                radial-gradient(ellipse at 75% 25%, rgba(255,255,255,0.15) 0%, transparent 30%),
+                radial-gradient(ellipse at 25% 75%, rgba(255,255,255,0.15) 0%, transparent 30%),
+                linear-gradient(45deg, transparent 48%, rgba(255,255,255,0.1) 50%, transparent 52%),
+                linear-gradient(-45deg, transparent 48%, rgba(255,255,255,0.1) 50%, transparent 52%);
+        }
+        .tile.black::after {
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        /* Teal tile - Wave/Scale pattern */
+        .tile.teal { 
+            background: linear-gradient(135deg, #26A69A 0%, #00796B 100%); 
+        }
+        .tile.teal::before {
+            background: 
+                radial-gradient(circle at 0% 50%, transparent 25%, rgba(255,255,255,0.3) 26%, rgba(255,255,255,0.3) 28%, transparent 29%),
+                radial-gradient(circle at 100% 50%, transparent 25%, rgba(255,255,255,0.3) 26%, rgba(255,255,255,0.3) 28%, transparent 29%),
+                radial-gradient(circle at 50% 0%, transparent 25%, rgba(255,255,255,0.25) 26%, rgba(255,255,255,0.25) 28%, transparent 29%),
+                radial-gradient(circle at 50% 100%, transparent 25%, rgba(255,255,255,0.25) 26%, rgba(255,255,255,0.25) 28%, transparent 29%);
+        }
+        .tile.teal::after {
+            border: 2px solid rgba(255,255,255,0.2);
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.15) 20%, transparent 25%);
+        }
+
+        /* Players Section */
+        .players-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
+            gap: 30px;
+        }
+
+        .player-board {
+            background: linear-gradient(145deg, rgba(40, 40, 70, 0.9), rgba(25, 25, 50, 0.95));
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .player-board.active {
+            border-color: var(--gold);
+            box-shadow: 
+                0 15px 50px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(255, 215, 0, 0.2);
+        }
+
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .player-name {
+            font-family: 'Cinzel', serif;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .player-score {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--gold);
+            background: rgba(255, 215, 0, 0.1);
+            padding: 5px 20px;
+            border-radius: 10px;
+        }
+
+        .board-content {
+            display: flex;
+            gap: 30px;
+        }
+
+        /* Pattern Lines */
+        .pattern-lines {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .pattern-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .pattern-row:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .pattern-row.valid-target {
+            background: rgba(255, 215, 0, 0.2);
+            animation: glow 1s ease infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); }
+            50% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); }
+        }
+
+        .pattern-slot {
+            width: 38px;
+            height: 38px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+        }
+
+        .pattern-slot.filled {
+            border-style: solid;
+            border-color: transparent;
+        }
+
+        /* Wall */
+        .wall {
+            display: grid;
+            grid-template-columns: repeat(5, 38px);
+            grid-template-rows: repeat(5, 38px);
+            gap: 6px;
+        }
+
+        .wall-slot {
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            opacity: 0.4;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .wall-slot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.4;
+        }
+
+        .wall-slot.filled {
+            opacity: 1;
+            box-shadow: 
+                0 3px 10px rgba(0, 0, 0, 0.3),
+                inset 0 1px 2px rgba(255, 255, 255, 0.2);
+        }
+
+        /* Blue wall slot */
+        .wall-slot.blue { 
+            background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%); 
+        }
+        .wall-slot.blue::before {
+            background: 
+                radial-gradient(circle at 50% 50%, transparent 30%, rgba(255,255,255,0.3) 32%, transparent 34%),
+                radial-gradient(circle at 50% 20%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 50% 80%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 8%, transparent 10%),
+                radial-gradient(circle at 80% 50%, rgba(255,255,255,0.4) 8%, transparent 10%);
+        }
+
+        /* Yellow wall slot */
+        .wall-slot.yellow { 
+            background: linear-gradient(135deg, #FFD700 0%, #FFA000 100%); 
+        }
+        .wall-slot.yellow::before {
+            background: conic-gradient(from 0deg at 50% 50%, 
+                rgba(255,255,255,0.5) 0deg, transparent 30deg,
+                rgba(255,255,255,0.5) 45deg, transparent 75deg,
+                rgba(255,255,255,0.5) 90deg, transparent 120deg,
+                rgba(255,255,255,0.5) 135deg, transparent 165deg,
+                rgba(255,255,255,0.5) 180deg, transparent 210deg,
+                rgba(255,255,255,0.5) 225deg, transparent 255deg,
+                rgba(255,255,255,0.5) 270deg, transparent 300deg,
+                rgba(255,255,255,0.5) 315deg, transparent 345deg
+            );
+        }
+
+        /* Red wall slot */
+        .wall-slot.red { 
+            background: linear-gradient(135deg, #F44336 0%, #C62828 100%); 
+        }
+        .wall-slot.red::before {
+            background: 
+                linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.4) 55%, transparent 60%),
+                linear-gradient(-45deg, transparent 40%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.4) 55%, transparent 60%);
+        }
+
+        /* Black wall slot */
+        .wall-slot.black { 
+            background: linear-gradient(135deg, #424242 0%, #1a1a1a 100%); 
+        }
+        .wall-slot.black::before {
+            background: 
+                radial-gradient(ellipse at 25% 25%, rgba(255,255,255,0.2) 0%, transparent 40%),
+                radial-gradient(ellipse at 75% 75%, rgba(255,255,255,0.2) 0%, transparent 40%),
+                linear-gradient(45deg, transparent 48%, rgba(255,255,255,0.1) 50%, transparent 52%);
+        }
+
+        /* Teal wall slot */
+        .wall-slot.teal { 
+            background: linear-gradient(135deg, #26A69A 0%, #00796B 100%); 
+        }
+        .wall-slot.teal::before {
+            background: 
+                radial-gradient(circle at 0% 50%, transparent 25%, rgba(255,255,255,0.3) 26%, rgba(255,255,255,0.3) 28%, transparent 29%),
+                radial-gradient(circle at 100% 50%, transparent 25%, rgba(255,255,255,0.3) 26%, rgba(255,255,255,0.3) 28%, transparent 29%);
+        }
+
+        /* Floor Line */
+        .floor-section {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .floor-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+        }
+
+        .floor-line {
+            display: flex;
+            gap: 6px;
+        }
+
+        .floor-slot {
+            width: 38px;
+            height: 38px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 100, 100, 0.3);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: rgba(255, 100, 100, 0.6);
+            position: relative;
+        }
+
+        .floor-slot.filled {
+            border-style: solid;
+        }
+
+        .floor-slot.first-player-floor {
+            background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+            color: #1a1a2e;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border: 2px solid rgba(255, 215, 0, 0.6);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        /* Buttons */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .btn {
+            font-family: 'Cinzel', serif;
+            font-size: 1.1rem;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold) 0%, #ffa500 100%);
+            color: var(--bg-dark);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-3px);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, rgba(40, 40, 70, 0.98), rgba(25, 25, 50, 0.98));
+            padding: 50px;
+            border-radius: 30px;
+            text-align: center;
+            max-width: 500px;
+            border: 3px solid var(--gold);
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
+        }
+
+        .modal h2 {
+            font-family: 'Cinzel', serif;
+            font-size: 2.5rem;
+            color: var(--gold);
+            margin-bottom: 20px;
+        }
+
+        .modal p {
+            font-size: 1.3rem;
+            margin-bottom: 30px;
+        }
+
+        .winner-score {
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin: 20px 0;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(40, 40, 70, 0.95);
+            padding: 15px 30px;
+            border-radius: 15px;
+            border: 2px solid var(--gold);
+            font-size: 1.1rem;
+            z-index: 1001;
+            transition: transform 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Instructions */
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .instructions h3 {
+            font-family: 'Cinzel', serif;
+            color: var(--gold);
+            margin-bottom: 10px;
+        }
+
+        .instructions p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            opacity: 0.8;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .players-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .factory {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .tile {
+                width: 28px;
+                height: 28px;
+            }
+            
+            .pattern-slot, .wall-slot, .floor-slot {
+                width: 32px;
+                height: 32px;
+            }
+            
+            .wall {
+                grid-template-columns: repeat(5, 32px);
+                grid-template-rows: repeat(5, 32px);
+            }
+        }
+
+        /* Animations */
+        .tile-move {
+            animation: tileMove 0.4s ease;
+        }
+
+        @keyframes tileMove {
+            0% { transform: scale(0) rotate(-180deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+
+        .score-pop {
+            animation: scorePop 0.5s ease;
+        }
+
+        @keyframes scorePop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); color: #fff; }
+            100% { transform: scale(1); }
+        }
+
+        /* Deselect button */
+        .deselect-btn {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: linear-gradient(135deg, #ff6b6b 0%, #c0392b 100%);
+            color: white;
+            border: none;
+            padding: 15px 35px;
+            border-radius: 30px;
+            font-family: 'Cinzel', serif;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(192, 57, 43, 0.4);
+            z-index: 100;
+            transition: all 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .deselect-btn.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .deselect-btn:hover {
+            transform: translateX(-50%) translateY(-3px);
+            box-shadow: 0 8px 25px rgba(192, 57, 43, 0.5);
+        }
+
+        /* Scoring overlay */
+        .scoring-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: auto;
+            padding: 20px;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
+            z-index: 500;
+            display: none;
+            justify-content: center;
+            align-items: flex-start;
+            flex-direction: column;
+            pointer-events: none;
+        }
+
+        .scoring-overlay.show {
+            display: flex;
+        }
+
+        .scoring-text {
+            font-family: 'Cinzel', serif;
+            font-size: 2.5rem;
+            color: var(--gold);
+            text-align: center;
+            width: 100%;
+            animation: fadeInUp 0.5s ease;
+            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .scoring-details {
+            font-size: 1.2rem;
+            color: white;
+            margin-top: 10px;
+            text-align: center;
+            width: 100%;
+            animation: fadeInUp 0.5s ease 0.2s both;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tile-flying {
+            position: fixed;
+            z-index: 1000;
+            pointer-events: none;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .wall-slot.just-placed {
+            animation: wallPlace 0.6s ease;
+        }
+
+        @keyframes wallPlace {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(10deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .pattern-slot.placing {
+            animation: patternPlace 0.4s ease;
+        }
+
+        @keyframes patternPlace {
+            0% { transform: scale(0); opacity: 0; }
+            60% { transform: scale(1.15); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .player-board.scoring {
+            animation: boardGlow 1s ease;
+        }
+
+        @keyframes boardGlow {
+            0%, 100% { box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4); }
+            50% { box-shadow: 0 15px 50px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.3); }
+        }
+
+        .score-float {
+            position: absolute;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4CAF50;
+            pointer-events: none;
+            animation: floatUp 1s ease forwards;
+            z-index: 100;
+        }
+
+        .score-float.negative {
+            color: #f44336;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.3); }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <header>
+            <h1>✦ AZUL ✦</h1>
+            <div class="game-info">
+                <span>Round: <strong id="roundNum">1</strong></span>
+                <span class="current-player">Current: <strong id="currentPlayer">Player 1</strong></span>
+            </div>
+        </header>
+
+        <div class="instructions">
+            <h3>How to Play</h3>
+            <p>1. Click a tile from any factory or the center to select all tiles of that color.<br>
+            2. Click on a pattern line (left side of your board) to place the tiles.<br>
+            3. Completed rows score points when tiles move to the wall at round end.<br>
+            4. Tiles that don't fit go to the floor line (negative points!).<br>
+            5. Game ends when someone completes a horizontal row on their wall.</p>
+        </div>
+
+        <section class="factory-section">
+            <h2 class="section-title">✦ Factory Displays ✦</h2>
+            <div class="factories-container" id="factories">
+                <!-- Factories will be generated here -->
+            </div>
+        </section>
+
+        <section class="players-section" id="players">
+            <!-- Player boards will be generated here -->
+        </section>
+
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="showRules()">📖 Rules</button>
+            <button class="btn btn-primary" onclick="newGame()">🎮 New Game</button>
+        </div>
+    </div>
+
+    <div class="modal" id="gameOverModal">
+        <div class="modal-content">
+            <h2>🏆 Game Over!</h2>
+            <p id="winnerText">Player 1 Wins!</p>
+            <div class="winner-score" id="winnerScore">42</div>
+            <p style="font-size: 1rem; opacity: 0.7;">points</p>
+            <button class="btn btn-primary" onclick="newGame()" style="margin-top: 20px;">Play Again</button>
+        </div>
+    </div>
+
+    <div class="modal" id="rulesModal">
+        <div class="modal-content" style="max-width: 600px; text-align: left;">
+            <h2 style="text-align: center;">📖 Rules</h2>
+            <div style="max-height: 400px; overflow-y: auto; padding: 20px 0;">
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Objective</h3>
+                <p style="margin-bottom: 20px;">Score the most points by completing patterns on your wall!</p>
+                
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Taking Tiles</h3>
+                <p style="margin-bottom: 20px;">On your turn, take ALL tiles of one color from a factory or the center. Remaining tiles go to the center.</p>
+                
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Placing Tiles</h3>
+                <p style="margin-bottom: 20px;">Place tiles in a pattern line (left side). Each row can only hold one color. The row size matches the row number (1-5 slots).</p>
+                
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Wall Tiling</h3>
+                <p style="margin-bottom: 20px;">When a pattern line is full, one tile moves to the matching wall position. Extra tiles are discarded.</p>
+                
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Scoring</h3>
+                <p style="margin-bottom: 20px;">Each tile scores 1 point plus 1 for each adjacent tile horizontally and vertically. Completed rows, columns, and color sets give bonuses!</p>
+                
+                <h3 style="color: var(--gold); margin-bottom: 10px;">Floor Line</h3>
+                <p style="margin-bottom: 20px;">Tiles that can't be placed go here. They give negative points: -1, -1, -2, -2, -2, -3, -3</p>
+            </div>
+            <button class="btn btn-primary" onclick="closeRules()" style="display: block; margin: 20px auto 0;">Got it!</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <button class="deselect-btn" id="deselectBtn" onclick="deselectTiles()">✕ Cancel Selection</button>
+    
+    <div class="scoring-overlay" id="scoringOverlay">
+        <div class="scoring-text" id="scoringText">Scoring Round...</div>
+        <div class="scoring-details" id="scoringDetails"></div>
+    </div>
+
+    <script>
+        // Game Constants
+        const COLORS = ['blue', 'yellow', 'red', 'black', 'teal'];
+        const TILES_PER_COLOR = 20;
+        const FACTORY_COUNT = 5;
+        const TILES_PER_FACTORY = 4;
+        const FLOOR_PENALTIES = [-1, -1, -2, -2, -2, -3, -3];
+        
+        // Wall pattern (each row has colors shifted)
+        const WALL_PATTERN = [
+            ['blue', 'yellow', 'red', 'black', 'teal'],
+            ['teal', 'blue', 'yellow', 'red', 'black'],
+            ['black', 'teal', 'blue', 'yellow', 'red'],
+            ['red', 'black', 'teal', 'blue', 'yellow'],
+            ['yellow', 'red', 'black', 'teal', 'blue']
+        ];
+
+        // Game State
+        let gameState = {
+            players: [],
+            currentPlayer: 0,
+            factories: [],
+            centerPool: [],
+            tileBag: [],
+            discardPile: [],
+            round: 1,
+            selectedTiles: null,
+            selectedSource: null,
+            firstPlayerToken: true,
+            gameOver: false,
+            isAnimating: false
+        };
+
+        // Initialize Game
+        function initGame() {
+            // Create tile bag
+            gameState.tileBag = [];
+            COLORS.forEach(color => {
+                for (let i = 0; i < TILES_PER_COLOR; i++) {
+                    gameState.tileBag.push(color);
+                }
+            });
+            shuffleArray(gameState.tileBag);
+
+            // Initialize players
+            gameState.players = [
+                createPlayer('Player 1'),
+                createPlayer('Player 2')
+            ];
+
+            // Reset game state
+            gameState.currentPlayer = 0;
+            gameState.round = 1;
+            gameState.centerPool = [];
+            gameState.firstPlayerToken = true;
+            gameState.selectedTiles = null;
+            gameState.selectedSource = null;
+            gameState.gameOver = false;
+            gameState.discardPile = [];
+
+            // Fill factories
+            fillFactories();
+
+            // Render
+            render();
+        }
+
+        function createPlayer(name) {
+            return {
+                name: name,
+                score: 0,
+                patternLines: [[], [], [], [], []],
+                wall: Array(5).fill(null).map(() => Array(5).fill(false)),
+                floorLine: [],
+                hasFirstPlayerToken: false
+            };
+        }
+
+        function fillFactories() {
+            gameState.factories = [];
+            for (let i = 0; i < FACTORY_COUNT; i++) {
+                const factory = [];
+                for (let j = 0; j < TILES_PER_FACTORY; j++) {
+                    if (gameState.tileBag.length === 0) {
+                        // Refill from discard pile
+                        gameState.tileBag = [...gameState.discardPile];
+                        gameState.discardPile = [];
+                        shuffleArray(gameState.tileBag);
+                    }
+                    if (gameState.tileBag.length > 0) {
+                        factory.push(gameState.tileBag.pop());
+                    }
+                }
+                gameState.factories.push(factory);
+            }
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Render Functions
+        function render() {
+            renderFactories();
+            renderPlayers();
+            updateGameInfo();
+        }
+
+        function renderFactories() {
+            const container = document.getElementById('factories');
+            container.innerHTML = '';
+
+            // Render factories
+            gameState.factories.forEach((factory, index) => {
+                const factoryEl = document.createElement('div');
+                factoryEl.className = 'factory';
+                factoryEl.dataset.index = index;
+
+                factory.forEach((color, tileIndex) => {
+                    const tile = createTileElement(color);
+                    tile.dataset.factory = index;
+                    tile.dataset.color = color;
+                    
+                    // Highlight if this tile's color is selected from this factory
+                    if (gameState.selectedTiles && 
+                        gameState.selectedSource &&
+                        gameState.selectedSource.type === 'factory' &&
+                        gameState.selectedSource.index === index &&
+                        gameState.selectedSource.color === color) {
+                        tile.classList.add('selected');
+                    }
+                    
+                    tile.addEventListener('click', () => selectTile(index, color, 'factory'));
+                    factoryEl.appendChild(tile);
+                });
+
+                container.appendChild(factoryEl);
+            });
+
+            // Render center pool
+            const centerEl = document.createElement('div');
+            centerEl.className = 'center-pool';
+
+            if (gameState.firstPlayerToken) {
+                const token = document.createElement('div');
+                token.className = 'first-player-token';
+                token.textContent = '1';
+                token.title = 'First Player Token';
+                centerEl.appendChild(token);
+            }
+
+            gameState.centerPool.forEach((color, index) => {
+                const tile = createTileElement(color);
+                tile.dataset.color = color;
+                
+                // Highlight if this tile's color is selected from center
+                if (gameState.selectedTiles && 
+                    gameState.selectedSource &&
+                    gameState.selectedSource.type === 'center' &&
+                    gameState.selectedSource.color === color) {
+                    tile.classList.add('selected');
+                }
+                
+                tile.addEventListener('click', () => selectTile(-1, color, 'center'));
+                centerEl.appendChild(tile);
+            });
+
+            container.appendChild(centerEl);
+        }
+
+        function createTileElement(color) {
+            const tile = document.createElement('div');
+            tile.className = `tile ${color}`;
+            return tile;
+        }
+
+        function renderPlayers() {
+            const container = document.getElementById('players');
+            container.innerHTML = '';
+
+            gameState.players.forEach((player, index) => {
+                const boardEl = document.createElement('div');
+                boardEl.className = `player-board ${index === gameState.currentPlayer ? 'active' : ''}`;
+                
+                boardEl.innerHTML = `
+                    <div class="player-header">
+                        <div class="player-name">${player.name} ${player.hasFirstPlayerToken ? '👑' : ''}</div>
+                        <div class="player-score">${player.score}</div>
+                    </div>
+                    <div class="board-content">
+                        <div class="pattern-lines">
+                            ${renderPatternLines(player, index)}
+                        </div>
+                        <div class="wall">
+                            ${renderWall(player, index)}
+                        </div>
+                    </div>
+                    <div class="floor-section">
+                        <div class="floor-label">Floor Line (Penalty)</div>
+                        <div class="floor-line">
+                            ${renderFloorLine(player, index)}
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(boardEl);
+
+                // Add event listeners for pattern rows
+                if (index === gameState.currentPlayer) {
+                    const patternRows = boardEl.querySelectorAll('.pattern-row');
+                    patternRows.forEach((row, rowIndex) => {
+                        row.addEventListener('click', () => placeTiles(rowIndex));
+                    });
+                }
+            });
+        }
+
+        function renderPatternLines(player, playerIndex) {
+            let html = '';
+            for (let row = 0; row < 5; row++) {
+                const size = row + 1;
+                const tiles = player.patternLines[row];
+                const isValid = playerIndex === gameState.currentPlayer && 
+                               gameState.selectedTiles && 
+                               canPlaceInRow(player, row, gameState.selectedTiles[0]);
+
+                html += `<div class="pattern-row ${isValid ? 'valid-target' : ''}" data-row="${row}">`;
+                
+                for (let col = 0; col < size; col++) {
+                    const tileIndex = size - 1 - col;
+                    if (tileIndex < tiles.length) {
+                        html += `<div class="pattern-slot filled tile ${tiles[tileIndex]}"></div>`;
+                    } else {
+                        html += `<div class="pattern-slot"></div>`;
+                    }
+                }
+                
+                html += '</div>';
+            }
+            return html;
+        }
+
+        function renderWall(player, playerIndex) {
+            let html = '';
+            for (let row = 0; row < 5; row++) {
+                for (let col = 0; col < 5; col++) {
+                    const color = WALL_PATTERN[row][col];
+                    const filled = player.wall[row][col];
+                    html += `<div class="wall-slot ${color} ${filled ? 'filled' : ''}"></div>`;
+                }
+            }
+            return html;
+        }
+
+        function renderFloorLine(player, playerIndex) {
+            let html = '';
+            for (let i = 0; i < 7; i++) {
+                const tile = player.floorLine[i];
+                const penalty = FLOOR_PENALTIES[i];
+                if (tile) {
+                    if (tile === 'first') {
+                        html += `<div class="floor-slot filled first-player-floor">1</div>`;
+                    } else {
+                        html += `<div class="floor-slot filled tile ${tile}">${penalty}</div>`;
+                    }
+                } else {
+                    html += `<div class="floor-slot">${penalty}</div>`;
+                }
+            }
+            return html;
+        }
+
+        function updateGameInfo() {
+            document.getElementById('roundNum').textContent = gameState.round;
+            document.getElementById('currentPlayer').textContent = gameState.players[gameState.currentPlayer].name;
+        }
+
+        // Game Logic
+        function selectTile(sourceIndex, color, sourceType) {
+            if (gameState.gameOver || gameState.isAnimating) return;
+
+            // If clicking the same selection, deselect (unhighlight)
+            if (gameState.selectedTiles && 
+                gameState.selectedSource && 
+                gameState.selectedSource.index === sourceIndex && 
+                gameState.selectedSource.type === sourceType &&
+                gameState.selectedTiles[0] === color) {
+                deselectTiles();
+                return;
+            }
+
+            // Just highlight - don't move tiles yet
+            let tiles = [];
+
+            if (sourceType === 'factory') {
+                const factory = gameState.factories[sourceIndex];
+                tiles = factory.filter(t => t === color);
+            } else {
+                // Center pool
+                tiles = gameState.centerPool.filter(t => t === color);
+            }
+
+            gameState.selectedTiles = tiles;
+            gameState.selectedSource = { index: sourceIndex, type: sourceType, color: color };
+
+            showToast(`Selected ${tiles.length} ${color} tile(s). Click a row to place, or click again to cancel.`);
+            document.getElementById('deselectBtn').classList.add('show');
+            render();
+        }
+
+        function deselectTiles() {
+            if (!gameState.selectedTiles || gameState.isAnimating) return;
+            
+            gameState.selectedTiles = null;
+            gameState.selectedSource = null;
+            
+            document.getElementById('deselectBtn').classList.remove('show');
+            showToast('Selection cancelled.');
+            render();
+        }
+
+        function highlightValidTargets() {
+            // Already handled in render
+        }
+
+        function canPlaceInRow(player, rowIndex, color) {
+            const row = player.patternLines[rowIndex];
+            const maxSize = rowIndex + 1;
+            
+            // Row is full
+            if (row.length >= maxSize) return false;
+            
+            // Row has different color
+            if (row.length > 0 && row[0] !== color) return false;
+            
+            // Check if color already on wall for this row
+            const wallCol = WALL_PATTERN[rowIndex].indexOf(color);
+            if (player.wall[rowIndex][wallCol]) return false;
+            
+            return true;
+        }
+
+        function placeTiles(rowIndex) {
+            if (!gameState.selectedTiles || gameState.selectedTiles.length === 0 || gameState.isAnimating) {
+                if (!gameState.isAnimating) {
+                    showToast('First select tiles from a factory or center!');
+                }
+                return;
+            }
+
+            const player = gameState.players[gameState.currentPlayer];
+            const color = gameState.selectedTiles[0];
+            const tiles = [...gameState.selectedTiles];
+            const source = gameState.selectedSource;
+
+            if (rowIndex >= 0) {
+                // Placing in pattern line
+                if (!canPlaceInRow(player, rowIndex, color)) {
+                    showToast('Cannot place here! Try another row or floor line.');
+                    return;
+                }
+            }
+
+            // NOW remove tiles from source and move remaining to center
+            if (source.type === 'factory') {
+                const factory = gameState.factories[source.index];
+                const remainingTiles = factory.filter(t => t !== color);
+                gameState.centerPool.push(...remainingTiles);
+                gameState.factories[source.index] = [];
+            } else {
+                // Center pool - remove selected tiles
+                gameState.centerPool = gameState.centerPool.filter(t => t !== color);
+                
+                // First player to take from center gets first player token
+                if (gameState.firstPlayerToken) {
+                    player.hasFirstPlayerToken = true;
+                    player.floorLine.push('first');
+                    gameState.firstPlayerToken = false;
+                }
+            }
+
+            // Clear selection state before animation
+            gameState.selectedTiles = null;
+            gameState.selectedSource = null;
+            document.getElementById('deselectBtn').classList.remove('show');
+
+            if (rowIndex >= 0) {
+                const maxSize = rowIndex + 1;
+                const currentSize = player.patternLines[rowIndex].length;
+                const spaceLeft = maxSize - currentSize;
+
+                const tilesToPlace = tiles.slice(0, spaceLeft);
+                const overflow = tiles.slice(spaceLeft);
+
+                // Animate tiles placement
+                animateTilePlacement(player, rowIndex, tilesToPlace, overflow, () => {
+                    // Check if round is over
+                    if (isRoundOver()) {
+                        endRound();
+                    } else {
+                        nextPlayer();
+                        render();
+                    }
+                });
+            } else {
+                // Placing directly to floor
+                animateFloorPlacement(player, tiles, () => {
+                    if (isRoundOver()) {
+                        endRound();
+                    } else {
+                        nextPlayer();
+                        render();
+                    }
+                });
+            }
+        }
+
+        function animateTilePlacement(player, rowIndex, tilesToPlace, overflow, callback) {
+            gameState.isAnimating = true;
+            render();
+
+            let delay = 0;
+            const delayIncrement = 200;
+
+            // Place tiles one by one
+            tilesToPlace.forEach((tile, i) => {
+                setTimeout(() => {
+                    player.patternLines[rowIndex].push(tile);
+                    render();
+                    
+                    // Add animation class to the just-placed tile
+                    const patternRows = document.querySelectorAll(`.player-board.active .pattern-row`);
+                    if (patternRows[rowIndex]) {
+                        const slots = patternRows[rowIndex].querySelectorAll('.pattern-slot.filled');
+                        if (slots.length > 0) {
+                            slots[slots.length - 1].classList.add('placing');
+                        }
+                    }
+                }, delay);
+                delay += delayIncrement;
+            });
+
+            // Place overflow to floor
+            overflow.forEach((tile, i) => {
+                setTimeout(() => {
+                    if (player.floorLine.length < 7) {
+                        player.floorLine.push(tile);
+                    } else {
+                        gameState.discardPile.push(tile);
+                    }
+                    render();
+                }, delay);
+                delay += delayIncrement;
+            });
+
+            // Finish animation
+            setTimeout(() => {
+                gameState.isAnimating = false;
+                callback();
+            }, delay + 100);
+        }
+
+        function animateFloorPlacement(player, tiles, callback) {
+            gameState.isAnimating = true;
+            render();
+
+            let delay = 0;
+            const delayIncrement = 150;
+
+            tiles.forEach((tile, i) => {
+                setTimeout(() => {
+                    if (player.floorLine.length < 7) {
+                        player.floorLine.push(tile);
+                    } else {
+                        gameState.discardPile.push(tile);
+                    }
+                    render();
+                }, delay);
+                delay += delayIncrement;
+            });
+
+            setTimeout(() => {
+                gameState.isAnimating = false;
+                callback();
+            }, delay + 100);
+        }
+
+        function isRoundOver() {
+            const factoriesEmpty = gameState.factories.every(f => f.length === 0);
+            const centerEmpty = gameState.centerPool.length === 0;
+            return factoriesEmpty && centerEmpty;
+        }
+
+        function nextPlayer() {
+            gameState.currentPlayer = (gameState.currentPlayer + 1) % gameState.players.length;
+        }
+
+        function endRound() {
+            gameState.isAnimating = true;
+            
+            // Show scoring overlay
+            const overlay = document.getElementById('scoringOverlay');
+            const scoringText = document.getElementById('scoringText');
+            const scoringDetails = document.getElementById('scoringDetails');
+            
+            overlay.classList.add('show');
+            scoringText.textContent = '✨ Round Complete ✨';
+            scoringDetails.textContent = 'Moving tiles to the wall...';
+
+            setTimeout(() => {
+                scoringText.textContent = '📊 Scoring...';
+                performScoringAnimation(overlay);
+            }, 1500);
+        }
+
+        function performScoringAnimation(overlay) {
+            const scoringDetails = document.getElementById('scoringDetails');
+            let playerScores = [];
+
+            gameState.players.forEach((player, playerIndex) => {
+                let roundScore = 0;
+                let wallMoves = [];
+
+                // Collect all wall moves
+                for (let row = 0; row < 5; row++) {
+                    const maxSize = row + 1;
+                    if (player.patternLines[row].length === maxSize) {
+                        const color = player.patternLines[row][0];
+                        const col = WALL_PATTERN[row].indexOf(color);
+                        wallMoves.push({ row, col, color, patternSize: maxSize });
+                    }
+                }
+
+                playerScores.push({
+                    player,
+                    playerIndex,
+                    wallMoves,
+                    floorPenalty: 0
+                });
+            });
+
+            // Animate wall placements
+            let totalDelay = 0;
+            const moveDelay = 600;
+
+            playerScores.forEach((ps, pIndex) => {
+                ps.wallMoves.forEach((move, mIndex) => {
+                    setTimeout(() => {
+                        const player = ps.player;
+                        const { row, col, color, patternSize } = move;
+
+                        // Place tile on wall
+                        player.wall[row][col] = true;
+
+                        // Score the tile
+                        const points = scoreTile(player.wall, row, col);
+                        player.score += points;
+
+                        // Discard extra tiles
+                        for (let i = 1; i < patternSize; i++) {
+                            gameState.discardPile.push(color);
+                        }
+
+                        // Clear pattern line
+                        player.patternLines[row] = [];
+
+                        // Update display
+                        render();
+
+                        // Show floating score
+                        showFloatingScore(pIndex, row, col, points);
+
+                        scoringDetails.textContent = `${player.name}: +${points} points!`;
+
+                    }, totalDelay);
+                    totalDelay += moveDelay;
+                });
+            });
+
+            // Apply floor penalties after wall placements
+            setTimeout(() => {
+                scoringDetails.textContent = 'Applying floor penalties...';
+            }, totalDelay);
+
+            totalDelay += 500;
+
+            gameState.players.forEach((player, pIndex) => {
+                setTimeout(() => {
+                    let penalty = 0;
+                    player.floorLine.forEach((tile, index) => {
+                        if (index < FLOOR_PENALTIES.length) {
+                            penalty += FLOOR_PENALTIES[index];
+                        }
+                        if (tile !== 'first') {
+                            gameState.discardPile.push(tile);
+                        }
+                    });
+
+                    if (penalty < 0) {
+                        player.score += penalty;
+                        player.score = Math.max(0, player.score);
+                        scoringDetails.textContent = `${player.name}: ${penalty} penalty`;
+                        showFloatingPenalty(pIndex, penalty);
+                    }
+
+                    player.floorLine = [];
+                    render();
+                }, totalDelay);
+                totalDelay += 400;
+            });
+
+            // Check for game end and start new round
+            setTimeout(() => {
+                overlay.classList.remove('show');
+
+                if (checkGameEnd()) {
+                    endGame();
+                    return;
+                }
+
+                // Start new round
+                gameState.round++;
+                gameState.firstPlayerToken = true;
+
+                // Find first player for next round
+                const firstPlayerIndex = gameState.players.findIndex(p => p.hasFirstPlayerToken);
+                if (firstPlayerIndex !== -1) {
+                    gameState.currentPlayer = firstPlayerIndex;
+                    gameState.players.forEach(p => p.hasFirstPlayerToken = false);
+                }
+
+                // Show new round message
+                setTimeout(() => {
+                    showToast(`🎲 Round ${gameState.round} begins!`);
+                    fillFactories();
+                    gameState.isAnimating = false;
+                    render();
+                }, 300);
+
+            }, totalDelay + 800);
+        }
+
+        function showFloatingScore(playerIndex, row, col, points) {
+            const boards = document.querySelectorAll('.player-board');
+            const board = boards[playerIndex];
+            if (!board) return;
+
+            const wallSlots = board.querySelectorAll('.wall-slot');
+            const slotIndex = row * 5 + col;
+            const slot = wallSlots[slotIndex];
+            if (!slot) return;
+
+            slot.classList.add('just-placed');
+
+            const float = document.createElement('div');
+            float.className = 'score-float';
+            float.textContent = `+${points}`;
+            float.style.left = slot.offsetLeft + 'px';
+            float.style.top = slot.offsetTop + 'px';
+            board.querySelector('.board-content').appendChild(float);
+
+            setTimeout(() => {
+                float.remove();
+                slot.classList.remove('just-placed');
+            }, 1000);
+        }
+
+        function showFloatingPenalty(playerIndex, penalty) {
+            const boards = document.querySelectorAll('.player-board');
+            const board = boards[playerIndex];
+            if (!board) return;
+
+            const floorSection = board.querySelector('.floor-section');
+            if (!floorSection) return;
+
+            const float = document.createElement('div');
+            float.className = 'score-float negative';
+            float.textContent = penalty;
+            float.style.left = '50%';
+            float.style.top = '0';
+            floorSection.style.position = 'relative';
+            floorSection.appendChild(float);
+
+            setTimeout(() => float.remove(), 1000);
+        }
+
+        function scoreTile(wall, row, col) {
+            let points = 0;
+            let horizontal = 1;
+            let vertical = 1;
+
+            // Count horizontal
+            for (let c = col - 1; c >= 0 && wall[row][c]; c--) horizontal++;
+            for (let c = col + 1; c < 5 && wall[row][c]; c++) horizontal++;
+
+            // Count vertical
+            for (let r = row - 1; r >= 0 && wall[r][col]; r--) vertical++;
+            for (let r = row + 1; r < 5 && wall[r][col]; r++) vertical++;
+
+            if (horizontal > 1) points += horizontal;
+            if (vertical > 1) points += vertical;
+            if (horizontal === 1 && vertical === 1) points = 1;
+
+            return points;
+        }
+
+        function checkGameEnd() {
+            return gameState.players.some(player => {
+                for (let row = 0; row < 5; row++) {
+                    if (player.wall[row].every(cell => cell)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        function endGame() {
+            gameState.gameOver = true;
+
+            // Add bonus points
+            gameState.players.forEach(player => {
+                // Complete horizontal lines: +2 each
+                for (let row = 0; row < 5; row++) {
+                    if (player.wall[row].every(cell => cell)) {
+                        player.score += 2;
+                    }
+                }
+
+                // Complete vertical lines: +7 each
+                for (let col = 0; col < 5; col++) {
+                    let complete = true;
+                    for (let row = 0; row < 5; row++) {
+                        if (!player.wall[row][col]) {
+                            complete = false;
+                            break;
+                        }
+                    }
+                    if (complete) player.score += 7;
+                }
+
+                // Complete color sets: +10 each
+                COLORS.forEach(color => {
+                    let count = 0;
+                    for (let row = 0; row < 5; row++) {
+                        const col = WALL_PATTERN[row].indexOf(color);
+                        if (player.wall[row][col]) count++;
+                    }
+                    if (count === 5) player.score += 10;
+                });
+            });
+
+            render();
+
+            // Show winner
+            const winner = gameState.players.reduce((a, b) => a.score > b.score ? a : b);
+            document.getElementById('winnerText').textContent = `${winner.name} Wins!`;
+            document.getElementById('winnerScore').textContent = winner.score;
+            document.getElementById('gameOverModal').classList.add('show');
+        }
+
+        function newGame() {
+            document.getElementById('gameOverModal').classList.remove('show');
+            document.getElementById('scoringOverlay').classList.remove('show');
+            document.getElementById('deselectBtn').classList.remove('show');
+            initGame();
+            showToast('New game started!');
+        }
+
+        function showRules() {
+            document.getElementById('rulesModal').classList.add('show');
+        }
+
+        function closeRules() {
+            document.getElementById('rulesModal').classList.remove('show');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Add floor line click handler
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.floor-line') && gameState.selectedTiles && !gameState.isAnimating) {
+                placeTiles(-1);
+            }
+        });
+
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('show');
+                }
+            });
+        });
+
+        // Start the game
+        initGame();
+    </script>
+</body>
+</html>
