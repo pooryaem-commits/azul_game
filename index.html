@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azul - Online Multiplayer</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- PubNub for real-time sync (demo keys work without signup) -->
-    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.0.min.js"></script>
+    <!-- Gun.js for decentralized real-time sync (no API keys needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         :root {
             /* Tile Colors - Rich and vibrant */
@@ -1557,13 +1557,12 @@
     </div>
 
     <script>
-        // PubNub Realtime - Demo keys work for testing
-        // These are official PubNub demo keys
-        const PUBNUB_PUBLISH_KEY = 'pub-c-6dce793f-6e51-4249-b3ab-31b9fbd7a6b3';
-        const PUBNUB_SUBSCRIBE_KEY = 'sub-c-206f42ea-7e25-4f82-b197-c0c5dbd8cec8';
+        // Gun.js - Decentralized real-time database (no API keys needed!)
+        // Uses public relay servers for real-time sync
+        const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
         
-        let pubnub = null;
-        let gameChannelName = '';
+        let gameRoom = null;
+        let stateListener = null;
 
         // Multiplayer State
         let myUsername = '';
@@ -1643,7 +1642,6 @@
             roomCode = generateRoomCode();
             isHost = true;
             myPlayerIndex = 0;
-            gameChannelName = 'azul-game-' + roomCode;
 
             document.getElementById('choiceStep').style.display = 'none';
             document.getElementById('waitingStep').style.display = 'block';
@@ -1652,44 +1650,22 @@
             showToast('Creating room...');
 
             try {
-                // Initialize PubNub connection
-                pubnub = new PubNub({
-                    publishKey: PUBNUB_PUBLISH_KEY,
-                    subscribeKey: PUBNUB_SUBSCRIBE_KEY,
-                    userId: myUsername + '-' + Date.now()
+                // Create room in Gun.js
+                gameRoom = gun.get('azul-room-' + roomCode);
+                
+                // Set initial room data
+                gameRoom.put({
+                    host: myUsername,
+                    guest: '',
+                    status: 'waiting',
+                    lastUpdate: Date.now()
                 });
 
-                // Add message listener
-                pubnub.addListener({
-                    message: function(event) {
-                        console.log('Received message:', event.message.type);
-                        handlePubNubMessage(event.message);
-                    },
-                    status: function(event) {
-                        if (event.category === 'PNConnectedCategory') {
-                            console.log('PubNub connected');
-                            updatePlayerList([myUsername]);
-                            showToast('Room created! Share the code with your friend.');
-                            updateConnectionStatus(true);
-                        }
-                    }
-                });
-
-                // Subscribe to channel
-                pubnub.subscribe({ channels: [gameChannelName] });
-
-            } catch (err) {
-                console.error('Error creating room:', err);
-                showToast('Error creating room. Try again!');
-            }
-        }
-
-        function handlePubNubMessage(msg) {
-            switch(msg.type) {
-                case 'playerJoined':
-                    if (isHost) {
-                        console.log('Player joined:', msg.username);
-                        opponentUsername = msg.username;
+                // Listen for guest joining
+                gameRoom.get('guest').on((guest) => {
+                    if (guest && guest !== '' && !opponentUsername) {
+                        console.log('Player joined:', guest);
+                        opponentUsername = guest;
                         updatePlayerList([myUsername, opponentUsername]);
                         showToast(opponentUsername + ' joined!');
                         
@@ -1701,53 +1677,40 @@
                             }, 500);
                         }
                     }
-                    break;
-                    
-                case 'requestState':
-                    if (isHost && gameStarted) {
-                        sendGameState();
-                    }
-                    break;
-                    
-                case 'guestMove':
-                    if (isHost && msg.gameState) {
-                        syncGameState(msg.gameState);
-                        sendGameState();
-                    }
-                    break;
-                    
-                case 'gameState':
-                    if (!isHost && msg.state) {
-                        if (msg.state.players && msg.state.players.length > 0) {
-                            opponentUsername = msg.state.players[0].name;
+                });
+
+                // Listen for guest moves
+                gameRoom.get('guestMove').on((data) => {
+                    if (isHost && data && data.state) {
+                        try {
+                            const state = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
+                            syncGameState(state);
+                            sendGameState();
+                        } catch(e) {
+                            console.error('Error parsing guest move:', e);
                         }
-                        
-                        if (!gameStarted) {
-                            gameStarted = true;
-                            document.getElementById('lobbyOverlay').classList.add('hidden');
-                            updateTurnIndicator();
-                        }
-                        
-                        syncGameState(msg.state);
                     }
-                    break;
-                    
-                case 'playAgainRequest':
-                    if (isHost) {
+                });
+
+                // Listen for play again requests
+                gameRoom.get('playAgain').on((val) => {
+                    if (isHost && val && val.requested) {
                         const playerNames = [myUsername, opponentUsername];
                         initGameAsHost(playerNames);
                         document.getElementById('gameOverModal').classList.remove('show');
                         showToast('Starting new game...');
+                        gameRoom.get('playAgain').put({ requested: false });
                     }
-                    break;
-                    
-                case 'hostLeft':
-                    if (!isHost) {
-                        showToast('Host left the game!');
-                        updateConnectionStatus(false);
-                        leaveGame();
-                    }
-                    break;
+                });
+                
+                console.log('Room created:', roomCode);
+                updatePlayerList([myUsername]);
+                showToast('Room created! Share the code with your friend.');
+                updateConnectionStatus(true);
+
+            } catch (err) {
+                console.error('Error creating room:', err);
+                showToast('Error creating room. Try again!');
             }
         }
 
@@ -1762,7 +1725,6 @@
 
             isHost = false;
             myPlayerIndex = 1;
-            gameChannelName = 'azul-game-' + roomCode;
 
             showToast('Connecting to room...');
             
@@ -1776,46 +1738,60 @@
             `;
 
             try {
-                // Initialize PubNub connection
-                pubnub = new PubNub({
-                    publishKey: PUBNUB_PUBLISH_KEY,
-                    subscribeKey: PUBNUB_SUBSCRIBE_KEY,
-                    userId: myUsername + '-' + Date.now()
-                });
+                // Join room in Gun.js
+                gameRoom = gun.get('azul-room-' + roomCode);
+                
+                // Check if room exists by looking for host
+                let foundRoom = false;
+                let checkTimeout = setTimeout(() => {
+                    if (!foundRoom) {
+                        showToast('Room not found! Check the code.');
+                        cancelJoin();
+                    }
+                }, 5000);
 
-                // Add message listener
-                pubnub.addListener({
-                    message: function(event) {
-                        console.log('Received message:', event.message.type);
-                        handlePubNubMessage(event.message);
-                    },
-                    status: function(event) {
-                        if (event.category === 'PNConnectedCategory') {
-                            console.log('PubNub connected as guest');
-                            
-                            updatePlayerList([myUsername]);
-                            showToast('Connected! Waiting for game to start...');
-                            updateConnectionStatus(true);
-                            
-                            // Announce joining
-                            pubnub.publish({
-                                channel: gameChannelName,
-                                message: { type: 'playerJoined', username: myUsername }
-                            });
-                            
-                            // Request current state
-                            setTimeout(() => {
-                                pubnub.publish({
-                                    channel: gameChannelName,
-                                    message: { type: 'requestState' }
-                                });
-                            }, 1000);
-                        }
+                gameRoom.get('host').once((host) => {
+                    if (host && host !== '') {
+                        foundRoom = true;
+                        clearTimeout(checkTimeout);
+                        opponentUsername = host;
+                        
+                        // Register as guest
+                        gameRoom.get('guest').put(myUsername);
+                        
+                        // Listen for game state from host
+                        gameRoom.get('gameState').on((data) => {
+                            if (!isHost && data && data.state) {
+                                try {
+                                    const state = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
+                                    
+                                    if (!gameStarted) {
+                                        gameStarted = true;
+                                        document.getElementById('lobbyOverlay').classList.add('hidden');
+                                        updateTurnIndicator();
+                                    }
+                                    
+                                    syncGameState(state);
+                                } catch(e) {
+                                    console.error('Error parsing game state:', e);
+                                }
+                            }
+                        });
+
+                        // Listen for host leaving
+                        gameRoom.get('hostLeft').on((val) => {
+                            if (val && val.left) {
+                                showToast('Host left the game!');
+                                updateConnectionStatus(false);
+                                leaveGame();
+                            }
+                        });
+                        
+                        updatePlayerList([opponentUsername, myUsername]);
+                        showToast('Connected! Waiting for game to start...');
+                        updateConnectionStatus(true);
                     }
                 });
-
-                // Subscribe to channel
-                pubnub.subscribe({ channels: [gameChannelName] });
 
             } catch (err) {
                 console.error('Error joining room:', err);
@@ -1825,10 +1801,11 @@
         }
 
         function cancelJoin() {
-            if (pubnub) {
-                pubnub.unsubscribeAll();
-                pubnub = null;
+            if (gameRoom && stateListener) {
+                gameRoom.get('gameState').off();
             }
+            gameRoom = null;
+            stateListener = null;
             
             // Reset join step UI
             document.getElementById('joinStep').innerHTML = `
@@ -1852,7 +1829,7 @@
         }
 
         function sendGameState() {
-            if (!pubnub || !gameChannelName) return;
+            if (!gameRoom) return;
 
             const stateToSync = {
                 players: gameState.players,
@@ -1867,14 +1844,14 @@
             };
 
             if (isHost) {
-                pubnub.publish({
-                    channel: gameChannelName,
-                    message: { type: 'gameState', state: stateToSync }
+                gameRoom.get('gameState').put({ 
+                    state: JSON.stringify(stateToSync),
+                    timestamp: Date.now()
                 });
             } else {
-                pubnub.publish({
-                    channel: gameChannelName,
-                    message: { type: 'guestMove', gameState: stateToSync }
+                gameRoom.get('guestMove').put({ 
+                    state: JSON.stringify(stateToSync),
+                    timestamp: Date.now()
                 });
             }
         }
@@ -1912,23 +1889,24 @@
         }
 
         function leaveGame() {
-            // Notify other player and cleanup PubNub
-            if (pubnub && isHost && gameChannelName) {
-                pubnub.publish({
-                    channel: gameChannelName,
-                    message: { type: 'hostLeft' }
-                });
+            // Notify other player via Gun.js
+            if (gameRoom && isHost) {
+                gameRoom.get('hostLeft').put({ left: true });
             }
             
-            if (pubnub) {
-                pubnub.unsubscribeAll();
-                pubnub = null;
+            // Clean up Gun listeners
+            if (gameRoom) {
+                gameRoom.get('guest').off();
+                gameRoom.get('gameState').off();
+                gameRoom.get('guestMove').off();
+                gameRoom.get('playAgain').off();
+                gameRoom.get('hostLeft').off();
             }
+            gameRoom = null;
             
             // Reset everything
             gameStarted = false;
             roomCode = '';
-            gameChannelName = '';
             myPlayerIndex = -1;
             opponentUsername = '';
             
@@ -1945,17 +1923,14 @@
         }
 
         function playAgain() {
-            if (pubnub && gameChannelName && isHost) {
+            if (gameRoom && isHost) {
                 const playerNames = [myUsername, opponentUsername];
                 initGameAsHost(playerNames);
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Starting new game...');
-            } else if (pubnub && gameChannelName) {
+            } else if (gameRoom) {
                 // Guest requests play again
-                pubnub.publish({
-                    channel: gameChannelName,
-                    message: { type: 'playAgainRequest' }
-                });
+                gameRoom.get('playAgain').put({ requested: true, timestamp: Date.now() });
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Waiting for host to start new game...');
             }
