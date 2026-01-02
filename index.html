@@ -1643,9 +1643,11 @@
             document.getElementById('waitingStep').style.display = 'block';
             document.getElementById('roomCodeDisplay').textContent = roomCode;
 
+            showToast('Creating room...');
+
             // Create PeerJS peer with the room code as ID
             peer = new Peer('azul-' + roomCode, {
-                debug: 1
+                debug: 2
             });
 
             peer.on('open', (id) => {
@@ -1655,21 +1657,32 @@
             });
 
             peer.on('connection', (connection) => {
-                console.log('Guest connected!');
+                console.log('Guest is connecting...');
                 conn = connection;
-                setupConnection();
+                
+                conn.on('open', () => {
+                    console.log('Guest connection opened!');
+                    setupConnection();
+                });
             });
 
             peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 if (err.type === 'unavailable-id') {
-                    showToast('Room code already in use. Try again!');
-                    roomCode = generateRoomCode();
-                    document.getElementById('roomCodeDisplay').textContent = roomCode;
+                    showToast('Room code already in use. Generating new code...');
                     peer.destroy();
-                    createRoom();
+                    setTimeout(() => {
+                        createRoom();
+                    }, 500);
                 } else {
                     showToast('Connection error: ' + err.type);
+                }
+            });
+
+            peer.on('disconnected', () => {
+                console.log('Peer disconnected, attempting to reconnect...');
+                if (!peer.destroyed) {
+                    peer.reconnect();
                 }
             });
         }
@@ -1686,20 +1699,47 @@
             isHost = false;
             myPlayerIndex = 1;
 
-            // Create PeerJS peer
-            peer = new Peer({
-                debug: 1
+            showToast('Connecting to room...');
+            
+            // Show connecting state
+            document.getElementById('joinStep').innerHTML = `
+                <p>Connecting to room <strong>${roomCode}</strong>...</p>
+                <div class="lobby-status">
+                    <div class="waiting">⏳ Please wait...</div>
+                </div>
+                <button class="btn btn-secondary" onclick="cancelJoin()" style="width: 100%; margin-top: 10px;">Cancel</button>
+            `;
+
+            // Create PeerJS peer with a unique ID
+            const myPeerId = 'azul-guest-' + Math.random().toString(36).substr(2, 9);
+            peer = new Peer(myPeerId, {
+                debug: 2
             });
 
             peer.on('open', (id) => {
                 console.log('Guest peer opened with ID:', id);
                 
                 // Connect to host
+                console.log('Attempting to connect to: azul-' + roomCode);
                 conn = peer.connect('azul-' + roomCode, {
                     reliable: true
                 });
 
+                if (!conn) {
+                    showToast('Failed to create connection!');
+                    return;
+                }
+
+                // Set connection timeout
+                const connectionTimeout = setTimeout(() => {
+                    if (!conn.open) {
+                        showToast('Connection timeout. Room may not exist.');
+                        cancelJoin();
+                    }
+                }, 15000);
+
                 conn.on('open', () => {
+                    clearTimeout(connectionTimeout);
                     console.log('Connected to host!');
                     setupConnection();
                     
@@ -1708,11 +1748,15 @@
                         type: 'join',
                         username: myUsername
                     });
+                    
+                    showToast('Connected! Waiting for game to start...');
                 });
 
                 conn.on('error', (err) => {
+                    clearTimeout(connectionTimeout);
                     console.error('Connection error:', err);
                     showToast('Could not connect to room. Check the code!');
+                    cancelJoin();
                 });
             });
 
@@ -1723,7 +1767,34 @@
                 } else {
                     showToast('Connection error: ' + err.type);
                 }
+                cancelJoin();
             });
+        }
+
+        function cancelJoin() {
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            if (conn) {
+                conn.close();
+                conn = null;
+            }
+            
+            // Reset join step UI
+            document.getElementById('joinStep').innerHTML = `
+                <p>Enter the room code:</p>
+                <input type="text" class="lobby-input" id="roomCodeInput" placeholder="XXXXXX" maxlength="6" style="text-transform: uppercase; text-align: center; letter-spacing: 5px; font-size: 1.5rem;">
+                <button class="btn btn-primary" onclick="joinRoom()" style="width: 100%; margin-top: 10px;">Join Game</button>
+                <button class="btn btn-secondary" onclick="showChoiceStep()" style="width: 100%; margin-top: 10px;">← Back</button>
+            `;
+            
+            // Re-add enter key listener
+            document.getElementById('roomCodeInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') joinRoom();
+            });
+            
+            showChoiceStep();
         }
 
         function setupConnection() {
