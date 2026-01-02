@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azul - Online Multiplayer</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Gun.js for decentralized real-time sync (no API keys needed) -->
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <!-- PeerJS for WebRTC peer-to-peer connections -->
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <style>
         :root {
             /* Tile Colors - Rich and vibrant */
@@ -1557,12 +1557,11 @@
     </div>
 
     <script>
-        // Gun.js - Decentralized real-time database (no API keys needed!)
-        // Uses public relay servers for real-time sync
-        const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
-        
-        let gameRoom = null;
-        let stateListener = null;
+        // PeerJS for WebRTC peer-to-peer connections
+        // Uses PeerJS Cloud as signaling server (status: https://status.peerjs.com/)
+        let peer = null;
+        let conn = null;
+        let pendingConnection = null;
 
         // Multiplayer State
         let myUsername = '';
@@ -1650,67 +1649,142 @@
             showToast('Creating room...');
 
             try {
-                // Create room in Gun.js
-                gameRoom = gun.get('azul-room-' + roomCode);
-                
-                // Set initial room data
-                gameRoom.put({
-                    host: myUsername,
-                    guest: '',
-                    status: 'waiting',
-                    lastUpdate: Date.now()
-                });
-
-                // Listen for guest joining
-                gameRoom.get('guest').on((guest) => {
-                    if (guest && guest !== '' && !opponentUsername) {
-                        console.log('Player joined:', guest);
-                        opponentUsername = guest;
-                        updatePlayerList([myUsername, opponentUsername]);
-                        showToast(opponentUsername + ' joined!');
-                        
-                        // Start game when guest joins
-                        if (!gameStarted) {
-                            gameStarted = true;
-                            setTimeout(() => {
-                                initGameAsHost([myUsername, opponentUsername]);
-                            }, 500);
-                        }
+                // Create PeerJS peer with room code as ID
+                const peerId = 'azul-' + roomCode;
+                peer = new Peer(peerId, {
+                    debug: 2,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' },
+                            { urls: 'stun:global.stun.twilio.com:3478' },
+                            { urls: 'stun:stun.stunprotocol.org:3478' }
+                        ]
                     }
                 });
 
-                // Listen for guest moves
-                gameRoom.get('guestMove').on((data) => {
-                    if (isHost && data && data.state) {
-                        try {
-                            const state = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
-                            syncGameState(state);
-                            sendGameState();
-                        } catch(e) {
-                            console.error('Error parsing guest move:', e);
-                        }
+                peer.on('open', (id) => {
+                    console.log('Peer created with ID:', id);
+                    updatePlayerList([myUsername]);
+                    showToast('Room created! Share the code with your friend.');
+                    updateConnectionStatus(true);
+                });
+
+                peer.on('connection', (connection) => {
+                    console.log('Guest connecting...');
+                    conn = connection;
+                    setupConnection(conn);
+                });
+
+                peer.on('error', (err) => {
+                    console.error('Peer error:', err);
+                    if (err.type === 'unavailable-id') {
+                        showToast('Room code already in use. Try again!');
+                        roomCode = generateRoomCode();
+                        document.getElementById('roomCodeDisplay').textContent = roomCode;
+                        createRoom();
+                    } else if (err.type === 'peer-unavailable') {
+                        showToast('Connection failed. Please try again.');
+                    } else {
+                        showToast('Connection error: ' + err.type);
                     }
                 });
 
-                // Listen for play again requests
-                gameRoom.get('playAgain').on((val) => {
-                    if (isHost && val && val.requested) {
-                        const playerNames = [myUsername, opponentUsername];
-                        initGameAsHost(playerNames);
-                        document.getElementById('gameOverModal').classList.remove('show');
-                        showToast('Starting new game...');
-                        gameRoom.get('playAgain').put({ requested: false });
-                    }
+                peer.on('disconnected', () => {
+                    console.log('Peer disconnected, attempting reconnect...');
+                    peer.reconnect();
                 });
-                
-                console.log('Room created:', roomCode);
-                updatePlayerList([myUsername]);
-                showToast('Room created! Share the code with your friend.');
-                updateConnectionStatus(true);
 
             } catch (err) {
                 console.error('Error creating room:', err);
                 showToast('Error creating room. Try again!');
+            }
+        }
+
+        function setupConnection(connection) {
+            connection.on('open', () => {
+                console.log('Connection established!');
+                updateConnectionStatus(true);
+            });
+
+            connection.on('data', (data) => {
+                console.log('Received data:', data.type);
+                handlePeerData(data);
+            });
+
+            connection.on('close', () => {
+                console.log('Connection closed');
+                if (gameStarted) {
+                    showToast('Opponent disconnected!');
+                    updateConnectionStatus(false);
+                }
+            });
+
+            connection.on('error', (err) => {
+                console.error('Connection error:', err);
+                showToast('Connection error!');
+            });
+        }
+
+        function handlePeerData(data) {
+            switch(data.type) {
+                case 'join':
+                    opponentUsername = data.username;
+                    updatePlayerList([myUsername, opponentUsername]);
+                    showToast(opponentUsername + ' joined!');
+                    
+                    // Send acknowledgment
+                    conn.send({ type: 'joinAck', username: myUsername });
+                    
+                    // Start game
+                    if (!gameStarted) {
+                        gameStarted = true;
+                        setTimeout(() => {
+                            initGameAsHost([myUsername, opponentUsername]);
+                        }, 500);
+                    }
+                    break;
+
+                case 'joinAck':
+                    opponentUsername = data.username;
+                    updatePlayerList([opponentUsername, myUsername]);
+                    showToast('Connected to ' + opponentUsername + '!');
+                    break;
+
+                case 'gameState':
+                    if (!isHost && data.state) {
+                        if (!gameStarted) {
+                            gameStarted = true;
+                            document.getElementById('lobbyOverlay').classList.add('hidden');
+                            updateTurnIndicator();
+                        }
+                        syncGameState(data.state);
+                    }
+                    break;
+
+                case 'guestMove':
+                    if (isHost && data.state) {
+                        syncGameState(data.state);
+                        sendGameState();
+                    }
+                    break;
+
+                case 'playAgain':
+                    if (isHost) {
+                        const playerNames = [myUsername, opponentUsername];
+                        initGameAsHost(playerNames);
+                        document.getElementById('gameOverModal').classList.remove('show');
+                        showToast('Starting new game...');
+                    }
+                    break;
+
+                case 'leave':
+                    showToast('Opponent left the game!');
+                    updateConnectionStatus(false);
+                    break;
             }
         }
 
@@ -1738,60 +1812,58 @@
             `;
 
             try {
-                // Join room in Gun.js
-                gameRoom = gun.get('azul-room-' + roomCode);
-                
-                // Check if room exists by looking for host
-                let foundRoom = false;
-                let checkTimeout = setTimeout(() => {
-                    if (!foundRoom) {
-                        showToast('Room not found! Check the code.');
-                        cancelJoin();
-                    }
-                }, 5000);
-
-                gameRoom.get('host').once((host) => {
-                    if (host && host !== '') {
-                        foundRoom = true;
-                        clearTimeout(checkTimeout);
-                        opponentUsername = host;
-                        
-                        // Register as guest
-                        gameRoom.get('guest').put(myUsername);
-                        
-                        // Listen for game state from host
-                        gameRoom.get('gameState').on((data) => {
-                            if (!isHost && data && data.state) {
-                                try {
-                                    const state = typeof data.state === 'string' ? JSON.parse(data.state) : data.state;
-                                    
-                                    if (!gameStarted) {
-                                        gameStarted = true;
-                                        document.getElementById('lobbyOverlay').classList.add('hidden');
-                                        updateTurnIndicator();
-                                    }
-                                    
-                                    syncGameState(state);
-                                } catch(e) {
-                                    console.error('Error parsing game state:', e);
-                                }
-                            }
-                        });
-
-                        // Listen for host leaving
-                        gameRoom.get('hostLeft').on((val) => {
-                            if (val && val.left) {
-                                showToast('Host left the game!');
-                                updateConnectionStatus(false);
-                                leaveGame();
-                            }
-                        });
-                        
-                        updatePlayerList([opponentUsername, myUsername]);
-                        showToast('Connected! Waiting for game to start...');
-                        updateConnectionStatus(true);
+                // Create peer for guest
+                peer = new Peer({
+                    debug: 2,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' },
+                            { urls: 'stun:global.stun.twilio.com:3478' },
+                            { urls: 'stun:stun.stunprotocol.org:3478' }
+                        ]
                     }
                 });
+
+                peer.on('open', (id) => {
+                    console.log('Guest peer created:', id);
+                    
+                    // Connect to host
+                    const hostPeerId = 'azul-' + roomCode;
+                    console.log('Connecting to host:', hostPeerId);
+                    conn = peer.connect(hostPeerId, { reliable: true });
+                    
+                    setupConnection(conn);
+                    
+                    conn.on('open', () => {
+                        // Send join message
+                        conn.send({ type: 'join', username: myUsername });
+                        updatePlayerList([myUsername]);
+                        showToast('Connected! Waiting for game to start...');
+                        updateConnectionStatus(true);
+                    });
+                });
+
+                peer.on('error', (err) => {
+                    console.error('Peer error:', err);
+                    if (err.type === 'peer-unavailable') {
+                        showToast('Room not found! Check the code.');
+                    } else {
+                        showToast('Connection error: ' + err.type);
+                    }
+                    cancelJoin();
+                });
+
+                // Timeout for connection
+                setTimeout(() => {
+                    if (!conn || !conn.open) {
+                        showToast('Connection timeout. Room may not exist.');
+                        cancelJoin();
+                    }
+                }, 10000);
 
             } catch (err) {
                 console.error('Error joining room:', err);
@@ -1801,11 +1873,14 @@
         }
 
         function cancelJoin() {
-            if (gameRoom && stateListener) {
-                gameRoom.get('gameState').off();
+            if (conn) {
+                conn.close();
+                conn = null;
             }
-            gameRoom = null;
-            stateListener = null;
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
             
             // Reset join step UI
             document.getElementById('joinStep').innerHTML = `
@@ -1829,7 +1904,7 @@
         }
 
         function sendGameState() {
-            if (!gameRoom) return;
+            if (!conn || !conn.open) return;
 
             const stateToSync = {
                 players: gameState.players,
@@ -1844,15 +1919,9 @@
             };
 
             if (isHost) {
-                gameRoom.get('gameState').put({ 
-                    state: JSON.stringify(stateToSync),
-                    timestamp: Date.now()
-                });
+                conn.send({ type: 'gameState', state: stateToSync });
             } else {
-                gameRoom.get('guestMove').put({ 
-                    state: JSON.stringify(stateToSync),
-                    timestamp: Date.now()
-                });
+                conn.send({ type: 'guestMove', state: stateToSync });
             }
         }
 
@@ -1889,20 +1958,17 @@
         }
 
         function leaveGame() {
-            // Notify other player via Gun.js
-            if (gameRoom && isHost) {
-                gameRoom.get('hostLeft').put({ left: true });
+            // Notify other player and cleanup PeerJS
+            if (conn && conn.open) {
+                conn.send({ type: 'leave' });
+                conn.close();
             }
+            conn = null;
             
-            // Clean up Gun listeners
-            if (gameRoom) {
-                gameRoom.get('guest').off();
-                gameRoom.get('gameState').off();
-                gameRoom.get('guestMove').off();
-                gameRoom.get('playAgain').off();
-                gameRoom.get('hostLeft').off();
+            if (peer) {
+                peer.destroy();
             }
-            gameRoom = null;
+            peer = null;
             
             // Reset everything
             gameStarted = false;
@@ -1923,14 +1989,14 @@
         }
 
         function playAgain() {
-            if (gameRoom && isHost) {
+            if (conn && conn.open && isHost) {
                 const playerNames = [myUsername, opponentUsername];
                 initGameAsHost(playerNames);
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Starting new game...');
-            } else if (gameRoom) {
+            } else if (conn && conn.open) {
                 // Guest requests play again
-                gameRoom.get('playAgain').put({ requested: true, timestamp: Date.now() });
+                conn.send({ type: 'playAgain' });
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Waiting for host to start new game...');
             }
