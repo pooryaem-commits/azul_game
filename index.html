@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azul - Online Multiplayer</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Ably for real-time sync (free tier, no signup needed for demo) -->
-    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <!-- PubNub for real-time sync (demo keys work without signup) -->
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.0.min.js"></script>
     <style>
         :root {
             /* Tile Colors - Rich and vibrant */
@@ -1557,13 +1557,13 @@
     </div>
 
     <script>
-        // Ably Realtime - Free tier for real-time multiplayer
-        // Using a demo API key (limited but works for testing)
-        const ABLY_API_KEY = 'xVLyHw.Dv5aAQ:dG8vKjU8EL8j4F_lf8U8jMWHn89-UKsLpVG9aNLNFfY';
+        // PubNub Realtime - Demo keys work for testing
+        // These are official PubNub demo keys
+        const PUBNUB_PUBLISH_KEY = 'pub-c-6dce793f-6e51-4249-b3ab-31b9fbd7a6b3';
+        const PUBNUB_SUBSCRIBE_KEY = 'sub-c-206f42ea-7e25-4f82-b197-c0c5dbd8cec8';
         
-        let ably = null;
-        let gameChannel = null;
-        let presenceChannel = null;
+        let pubnub = null;
+        let gameChannelName = '';
 
         // Multiplayer State
         let myUsername = '';
@@ -1643,6 +1643,7 @@
             roomCode = generateRoomCode();
             isHost = true;
             myPlayerIndex = 0;
+            gameChannelName = 'azul-game-' + roomCode;
 
             document.getElementById('choiceStep').style.display = 'none';
             document.getElementById('waitingStep').style.display = 'block';
@@ -1651,22 +1652,44 @@
             showToast('Creating room...');
 
             try {
-                // Initialize Ably connection
-                ably = new Ably.Realtime({ 
-                    key: ABLY_API_KEY,
-                    clientId: myUsername + '-' + Date.now()
+                // Initialize PubNub connection
+                pubnub = new PubNub({
+                    publishKey: PUBNUB_PUBLISH_KEY,
+                    subscribeKey: PUBNUB_SUBSCRIBE_KEY,
+                    userId: myUsername + '-' + Date.now()
                 });
 
-                ably.connection.on('connected', () => {
-                    console.log('Ably connected');
-                    
-                    // Create game channel
-                    gameChannel = ably.channels.get('azul-game-' + roomCode);
-                    
-                    // Subscribe to messages
-                    gameChannel.subscribe('playerJoined', (message) => {
-                        console.log('Player joined:', message.data.username);
-                        opponentUsername = message.data.username;
+                // Add message listener
+                pubnub.addListener({
+                    message: function(event) {
+                        console.log('Received message:', event.message.type);
+                        handlePubNubMessage(event.message);
+                    },
+                    status: function(event) {
+                        if (event.category === 'PNConnectedCategory') {
+                            console.log('PubNub connected');
+                            updatePlayerList([myUsername]);
+                            showToast('Room created! Share the code with your friend.');
+                            updateConnectionStatus(true);
+                        }
+                    }
+                });
+
+                // Subscribe to channel
+                pubnub.subscribe({ channels: [gameChannelName] });
+
+            } catch (err) {
+                console.error('Error creating room:', err);
+                showToast('Error creating room. Try again!');
+            }
+        }
+
+        function handlePubNubMessage(msg) {
+            switch(msg.type) {
+                case 'playerJoined':
+                    if (isHost) {
+                        console.log('Player joined:', msg.username);
+                        opponentUsername = msg.username;
                         updatePlayerList([myUsername, opponentUsername]);
                         showToast(opponentUsername + ' joined!');
                         
@@ -1677,54 +1700,54 @@
                                 initGameAsHost([myUsername, opponentUsername]);
                             }, 500);
                         }
-                    });
-
-                    gameChannel.subscribe('requestState', (message) => {
-                        // Guest requesting current state
-                        if (isHost && gameStarted) {
-                            sendGameState();
-                        }
-                    });
-
-                    gameChannel.subscribe('guestMove', (message) => {
-                        // Guest made a move, sync the state back
-                        if (isHost && message.data.gameState) {
-                            syncGameState(message.data.gameState);
-                            // Re-broadcast to confirm
-                            sendGameState();
-                        }
-                    });
-
-                    gameChannel.subscribe('playAgainRequest', () => {
-                        if (isHost) {
-                            const playerNames = [myUsername, opponentUsername];
-                            initGameAsHost(playerNames);
-                            document.getElementById('gameOverModal').classList.remove('show');
-                            showToast('Starting new game...');
-                        }
-                    });
-
-                    gameChannel.subscribe('hostLeft', () => {
-                        if (!isHost) {
-                            showToast('Host left the game!');
-                            updateConnectionStatus(false);
-                            leaveGame();
-                        }
-                    });
+                    }
+                    break;
                     
-                    updatePlayerList([myUsername]);
-                    showToast('Room created! Share the code with your friend.');
-                    updateConnectionStatus(true);
-                });
-
-                ably.connection.on('failed', () => {
-                    console.error('Ably connection failed');
-                    showToast('Connection failed. Try again!');
-                });
-
-            } catch (err) {
-                console.error('Error creating room:', err);
-                showToast('Error creating room. Try again!');
+                case 'requestState':
+                    if (isHost && gameStarted) {
+                        sendGameState();
+                    }
+                    break;
+                    
+                case 'guestMove':
+                    if (isHost && msg.gameState) {
+                        syncGameState(msg.gameState);
+                        sendGameState();
+                    }
+                    break;
+                    
+                case 'gameState':
+                    if (!isHost && msg.state) {
+                        if (msg.state.players && msg.state.players.length > 0) {
+                            opponentUsername = msg.state.players[0].name;
+                        }
+                        
+                        if (!gameStarted) {
+                            gameStarted = true;
+                            document.getElementById('lobbyOverlay').classList.add('hidden');
+                            updateTurnIndicator();
+                        }
+                        
+                        syncGameState(msg.state);
+                    }
+                    break;
+                    
+                case 'playAgainRequest':
+                    if (isHost) {
+                        const playerNames = [myUsername, opponentUsername];
+                        initGameAsHost(playerNames);
+                        document.getElementById('gameOverModal').classList.remove('show');
+                        showToast('Starting new game...');
+                    }
+                    break;
+                    
+                case 'hostLeft':
+                    if (!isHost) {
+                        showToast('Host left the game!');
+                        updateConnectionStatus(false);
+                        leaveGame();
+                    }
+                    break;
             }
         }
 
@@ -1739,6 +1762,7 @@
 
             isHost = false;
             myPlayerIndex = 1;
+            gameChannelName = 'azul-game-' + roomCode;
 
             showToast('Connecting to room...');
             
@@ -1752,61 +1776,46 @@
             `;
 
             try {
-                // Initialize Ably connection
-                ably = new Ably.Realtime({ 
-                    key: ABLY_API_KEY,
-                    clientId: myUsername + '-' + Date.now()
+                // Initialize PubNub connection
+                pubnub = new PubNub({
+                    publishKey: PUBNUB_PUBLISH_KEY,
+                    subscribeKey: PUBNUB_SUBSCRIBE_KEY,
+                    userId: myUsername + '-' + Date.now()
                 });
 
-                ably.connection.on('connected', () => {
-                    console.log('Ably connected as guest');
-                    
-                    // Join game channel
-                    gameChannel = ably.channels.get('azul-game-' + roomCode);
-                    
-                    // Subscribe to game state updates from host
-                    gameChannel.subscribe('gameState', (message) => {
-                        console.log('Received game state from host');
-                        if (!isHost && message.data) {
-                            // Get host username from first player
-                            if (message.data.players && message.data.players.length > 0) {
-                                opponentUsername = message.data.players[0].name;
-                            }
+                // Add message listener
+                pubnub.addListener({
+                    message: function(event) {
+                        console.log('Received message:', event.message.type);
+                        handlePubNubMessage(event.message);
+                    },
+                    status: function(event) {
+                        if (event.category === 'PNConnectedCategory') {
+                            console.log('PubNub connected as guest');
                             
-                            if (!gameStarted) {
-                                gameStarted = true;
-                                document.getElementById('lobbyOverlay').classList.add('hidden');
-                                updateTurnIndicator();
-                            }
+                            updatePlayerList([myUsername]);
+                            showToast('Connected! Waiting for game to start...');
+                            updateConnectionStatus(true);
                             
-                            syncGameState(message.data);
+                            // Announce joining
+                            pubnub.publish({
+                                channel: gameChannelName,
+                                message: { type: 'playerJoined', username: myUsername }
+                            });
+                            
+                            // Request current state
+                            setTimeout(() => {
+                                pubnub.publish({
+                                    channel: gameChannelName,
+                                    message: { type: 'requestState' }
+                                });
+                            }, 1000);
                         }
-                    });
-
-                    gameChannel.subscribe('hostLeft', () => {
-                        showToast('Host left the game!');
-                        updateConnectionStatus(false);
-                        leaveGame();
-                    });
-                    
-                    // Announce joining
-                    gameChannel.publish('playerJoined', { username: myUsername });
-                    
-                    updatePlayerList([myUsername]);
-                    showToast('Connected! Waiting for game to start...');
-                    updateConnectionStatus(true);
-                    
-                    // Request current state in case game already started
-                    setTimeout(() => {
-                        gameChannel.publish('requestState', {});
-                    }, 1000);
+                    }
                 });
 
-                ably.connection.on('failed', () => {
-                    console.error('Ably connection failed');
-                    showToast('Connection failed. Check the room code!');
-                    cancelJoin();
-                });
+                // Subscribe to channel
+                pubnub.subscribe({ channels: [gameChannelName] });
 
             } catch (err) {
                 console.error('Error joining room:', err);
@@ -1816,13 +1825,9 @@
         }
 
         function cancelJoin() {
-            if (gameChannel) {
-                gameChannel.unsubscribe();
-                gameChannel = null;
-            }
-            if (ably) {
-                ably.close();
-                ably = null;
+            if (pubnub) {
+                pubnub.unsubscribeAll();
+                pubnub = null;
             }
             
             // Reset join step UI
@@ -1847,7 +1852,7 @@
         }
 
         function sendGameState() {
-            if (!gameChannel) return;
+            if (!pubnub || !gameChannelName) return;
 
             const stateToSync = {
                 players: gameState.players,
@@ -1862,10 +1867,15 @@
             };
 
             if (isHost) {
-                gameChannel.publish('gameState', stateToSync);
+                pubnub.publish({
+                    channel: gameChannelName,
+                    message: { type: 'gameState', state: stateToSync }
+                });
             } else {
-                // Guest sends move to host for validation/broadcast
-                gameChannel.publish('guestMove', { gameState: stateToSync });
+                pubnub.publish({
+                    channel: gameChannelName,
+                    message: { type: 'guestMove', gameState: stateToSync }
+                });
             }
         }
 
@@ -1902,23 +1912,23 @@
         }
 
         function leaveGame() {
-            // Notify other player and cleanup Ably
-            if (gameChannel && isHost) {
-                gameChannel.publish('hostLeft', {});
+            // Notify other player and cleanup PubNub
+            if (pubnub && isHost && gameChannelName) {
+                pubnub.publish({
+                    channel: gameChannelName,
+                    message: { type: 'hostLeft' }
+                });
             }
             
-            if (gameChannel) {
-                gameChannel.unsubscribe();
-                gameChannel = null;
-            }
-            if (ably) {
-                ably.close();
-                ably = null;
+            if (pubnub) {
+                pubnub.unsubscribeAll();
+                pubnub = null;
             }
             
             // Reset everything
             gameStarted = false;
             roomCode = '';
+            gameChannelName = '';
             myPlayerIndex = -1;
             opponentUsername = '';
             
@@ -1935,14 +1945,17 @@
         }
 
         function playAgain() {
-            if (gameChannel && isHost) {
+            if (pubnub && gameChannelName && isHost) {
                 const playerNames = [myUsername, opponentUsername];
                 initGameAsHost(playerNames);
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Starting new game...');
-            } else if (gameChannel) {
+            } else if (pubnub && gameChannelName) {
                 // Guest requests play again
-                gameChannel.publish('playAgainRequest', {});
+                pubnub.publish({
+                    channel: gameChannelName,
+                    message: { type: 'playAgainRequest' }
+                });
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Waiting for host to start new game...');
             }
