@@ -143,28 +143,52 @@ conn.on('data', (data) => {
 });
 ```
 
-### STUN Servers
+### STUN and TURN Servers
 
-For better NAT traversal (connecting players behind routers), include multiple STUN servers:
+For reliable connections across different networks (NAT traversal), the game uses both STUN and TURN servers:
 
+**STUN servers** help discover your public IP address:
 ```javascript
-config: {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
-    ]
+{ urls: 'stun:stun.l.google.com:19302' },
+{ urls: 'stun:stun1.l.google.com:19302' },
+{ urls: 'stun:global.stun.twilio.com:3478' }
+```
+
+**TURN servers** relay data when direct connection fails (strict firewalls, symmetric NAT):
+```javascript
+{
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+},
+{
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+},
+{
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
 }
 ```
+
+> **Note**: TURN servers are essential for ~10-15% of connections that can't establish direct peer-to-peer links due to network restrictions.
+
+### Connection Timeout
+
+The game uses a **30-second timeout** for connection attempts. If connection fails:
+- Check if room code is correct
+- Ensure host hasn't left the room
+- Try disabling VPN if using one
+- Some corporate/university networks may block WebRTC
 
 ### Limitations
 
 - **2 Players**: WebRTC is best for small groups; for larger lobbies, consider a server
-- **NAT Issues**: Some strict corporate/university networks may block WebRTC
+- **NAT Issues**: Some strict corporate/university networks may block WebRTC (TURN servers help but don't guarantee 100%)
 - **No Persistence**: Game state is lost if both players disconnect
+- **Connection Time**: Initial connection may take up to 30 seconds in some network conditions
 
 ### Alternatives Considered
 
@@ -175,6 +199,33 @@ config: {
 | Ably/PubNub | Professional, reliable | API keys required, costs $ |
 | Gun.js | Decentralized, no keys | Unreliable relay servers |
 | Custom WebSocket | Full control | Requires server hosting |
+
+## Troubleshooting
+
+### Connection Issues
+
+| Problem | Solution |
+|---------|----------|
+| "Room not found" | Double-check the 6-character room code |
+| Connection timeout | Host should create a new room; both players refresh |
+| "Guest connecting..." but never connects | Firewall/NAT issue - try different network or disable VPN |
+| Works locally but not remotely | TURN servers should handle this; if not, network is very restrictive |
+
+### Debug Mode
+
+Open browser console (F12 → Console) to see connection logs:
+- `Peer created with ID: azul-XXXXXX` - Host room created
+- `Guest peer created: xxxx-xxxx-xxxx` - Guest initialized
+- `Connecting to host: azul-XXXXXX` - Guest attempting connection
+- `Connection opened to host!` - Success! Game should start
+
+### Network Requirements
+
+For best results, ensure:
+- Both players have stable internet connection
+- WebRTC is not blocked (most networks allow it)
+- If using VPN, try disabling it temporarily
+- Corporate/school networks may have restrictions
 
 ## Game Rules
 
@@ -191,7 +242,8 @@ The game ends when a player completes a horizontal row on their wall. The player
 
 - **Frontend**: Vanilla HTML, CSS, JavaScript
 - **Hosting**: GitHub Pages
-- **Multiplayer**: PeerJS (WebRTC)
+- **Multiplayer**: PeerJS (WebRTC) with STUN/TURN servers
+- **Connection Timeout**: 30 seconds
 - **No Dependencies**: Single HTML file (~3000 lines)
 
 ## Contributing
