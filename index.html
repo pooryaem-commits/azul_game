@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Azul - Online Multiplayer</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- PeerJS for WebRTC peer-to-peer connection -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Firebase for real-time sync -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         :root {
             /* Tile Colors - Rich and vibrant */
@@ -1557,35 +1558,25 @@
     </div>
 
     <script>
-        // PeerJS configuration with STUN/TURN servers for better connectivity
-        const peerConfig = {
-            debug: 2,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' },
-                    // Free TURN servers for NAT traversal
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
-                ]
-            }
+        // Firebase Configuration - Using Firebase Realtime Database
+        // Note: This uses a public demo database. For production, create your own at firebase.google.com
+        const firebaseConfig = {
+            databaseURL: "https://azul-multiplayer-default-rtdb.firebaseio.com"
         };
 
-        // PeerJS for WebRTC peer-to-peer connection
-        let peer = null;
-        let conn = null;
+        // Initialize Firebase
+        let db = null;
+        let roomRef = null;
+        
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.database();
+            console.log('Firebase initialized successfully');
+        } catch (e) {
+            console.error('Firebase init error:', e);
+        }
 
         // Multiplayer State
         let myUsername = '';
@@ -1661,6 +1652,11 @@
         }
 
         function createRoom() {
+            if (!db) {
+                showToast('Database not available. Please refresh the page.');
+                return;
+            }
+
             roomCode = generateRoomCode();
             isHost = true;
             myPlayerIndex = 0;
@@ -1671,47 +1667,38 @@
 
             showToast('Creating room...');
 
-            // Create PeerJS peer with the room code as ID (with STUN/TURN config)
-            peer = new Peer('azul-' + roomCode, peerConfig);
-
-            peer.on('open', (id) => {
-                console.log('Host peer opened with ID:', id);
+            // Create room in Firebase
+            roomRef = db.ref('azul-rooms/' + roomCode);
+            
+            roomRef.set({
+                host: myUsername,
+                players: [myUsername],
+                status: 'waiting',
+                gameState: null,
+                createdAt: Date.now()
+            }).then(() => {
+                console.log('Room created:', roomCode);
                 updatePlayerList([myUsername]);
                 showToast('Room created! Share the code with your friend.');
-            });
-
-            peer.on('connection', (connection) => {
-                console.log('Guest is connecting...');
-                conn = connection;
+                updateConnectionStatus(true);
                 
-                conn.on('open', () => {
-                    console.log('Guest connection opened!');
-                    setupConnection();
-                });
-            });
-
-            peer.on('error', (err) => {
-                console.error('Peer error:', err);
-                if (err.type === 'unavailable-id') {
-                    showToast('Room code already in use. Generating new code...');
-                    peer.destroy();
-                    setTimeout(() => {
-                        createRoom();
-                    }, 500);
-                } else {
-                    showToast('Connection error: ' + err.type);
-                }
-            });
-
-            peer.on('disconnected', () => {
-                console.log('Peer disconnected, attempting to reconnect...');
-                if (!peer.destroyed) {
-                    peer.reconnect();
-                }
+                // Listen for changes (guest joining, game updates)
+                roomRef.on('value', handleRoomUpdate);
+                
+                // Remove room when host disconnects
+                roomRef.onDisconnect().remove();
+            }).catch((err) => {
+                console.error('Error creating room:', err);
+                showToast('Error creating room. Try again!');
             });
         }
 
         function joinRoom() {
+            if (!db) {
+                showToast('Database not available. Please refresh the page.');
+                return;
+            }
+
             const input = document.getElementById('roomCodeInput');
             roomCode = input.value.trim().toUpperCase();
             
@@ -1734,73 +1721,57 @@
                 <button class="btn btn-secondary" onclick="cancelJoin()" style="width: 100%; margin-top: 10px;">Cancel</button>
             `;
 
-            // Create PeerJS peer with a unique ID (with STUN/TURN config)
-            const myPeerId = 'azul-guest-' + Math.random().toString(36).substr(2, 9);
-            peer = new Peer(myPeerId, peerConfig);
-
-            peer.on('open', (id) => {
-                console.log('Guest peer opened with ID:', id);
-                
-                // Connect to host
-                console.log('Attempting to connect to: azul-' + roomCode);
-                conn = peer.connect('azul-' + roomCode, {
-                    reliable: true
-                });
-
-                if (!conn) {
-                    showToast('Failed to create connection!');
+            // Try to join the room
+            roomRef = db.ref('azul-rooms/' + roomCode);
+            
+            roomRef.once('value').then((snapshot) => {
+                if (!snapshot.exists()) {
+                    showToast('Room not found! Check the code.');
+                    cancelJoin();
                     return;
                 }
-
-                // Set connection timeout
-                const connectionTimeout = setTimeout(() => {
-                    if (!conn.open) {
-                        showToast('Connection timeout. Room may not exist.');
-                        cancelJoin();
-                    }
-                }, 15000);
-
-                conn.on('open', () => {
-                    clearTimeout(connectionTimeout);
-                    console.log('Connected to host!');
-                    setupConnection();
-                    
-                    // Send username to host
-                    conn.send({
-                        type: 'join',
-                        username: myUsername
-                    });
-                    
+                
+                const room = snapshot.val();
+                
+                if (room.status !== 'waiting') {
+                    showToast('Game already in progress!');
+                    cancelJoin();
+                    return;
+                }
+                
+                if (room.players && room.players.length >= 2) {
+                    showToast('Room is full!');
+                    cancelJoin();
+                    return;
+                }
+                
+                // Join the room
+                roomRef.update({
+                    players: [room.host, myUsername],
+                    status: 'ready'
+                }).then(() => {
+                    console.log('Joined room:', roomCode);
                     showToast('Connected! Waiting for game to start...');
-                });
-
-                conn.on('error', (err) => {
-                    clearTimeout(connectionTimeout);
-                    console.error('Connection error:', err);
-                    showToast('Could not connect to room. Check the code!');
+                    updateConnectionStatus(true);
+                    
+                    // Listen for game updates
+                    roomRef.on('value', handleRoomUpdate);
+                }).catch((err) => {
+                    console.error('Error joining room:', err);
+                    showToast('Error joining room. Try again!');
                     cancelJoin();
                 });
-            });
-
-            peer.on('error', (err) => {
-                console.error('Peer error:', err);
-                if (err.type === 'peer-unavailable') {
-                    showToast('Room not found! Check the code.');
-                } else {
-                    showToast('Connection error: ' + err.type);
-                }
+            }).catch((err) => {
+                console.error('Error finding room:', err);
+                showToast('Connection error. Try again!');
                 cancelJoin();
             });
         }
 
         function cancelJoin() {
-            if (peer) {
-                peer.destroy();
-                peer = null;
-            }
-            if (conn) {
-                conn.close();
-                conn = null;
+            if (roomRef) {
+                roomRef.off();
+                roomRef = null;
             }
             
             // Reset join step UI
@@ -1812,63 +1783,59 @@
             `;
             
             // Re-add enter key listener
-            document.getElementById('roomCodeInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') joinRoom();
-            });
+            setTimeout(() => {
+                const input = document.getElementById('roomCodeInput');
+                if (input) {
+                    input.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') joinRoom();
+                    });
+                }
+            }, 100);
             
             showChoiceStep();
         }
 
-        function setupConnection() {
-            conn.on('data', (data) => {
-                handleMessage(data);
-            });
-
-            conn.on('close', () => {
-                console.log('Connection closed');
+        function handleRoomUpdate(snapshot) {
+            if (!snapshot.exists()) {
+                // Room was deleted (host left)
                 if (gameStarted) {
-                    showToast('Opponent disconnected!');
+                    showToast('Opponent left the game!');
                     updateConnectionStatus(false);
                 }
-            });
-
-            updateConnectionStatus(true);
-        }
-
-        function handleMessage(data) {
-            console.log('Received:', data.type);
-
-            switch (data.type) {
-                case 'join':
-                    // Host receives this when guest joins
-                    if (isHost) {
-                        const guestUsername = data.username;
-                        updatePlayerList([myUsername, guestUsername]);
-                        
-                        // Start the game
-                        setTimeout(() => {
-                            initGameAsHost([myUsername, guestUsername]);
-                        }, 500);
-                    }
-                    break;
-
-                case 'gameState':
-                    // Both players receive game state updates
-                    syncGameState(data.state);
-                    break;
-
-                case 'playAgain':
-                    // Host receives request to play again
-                    if (isHost && gameState.gameOver) {
-                        const playerNames = gameState.players.map(p => p.name);
-                        initGameAsHost(playerNames);
-                    }
-                    break;
+                return;
+            }
+            
+            const room = snapshot.val();
+            console.log('Room update:', room.status, 'Players:', room.players?.length);
+            
+            // Update player list in lobby
+            if (room.players) {
+                updatePlayerList(room.players);
+            }
+            
+            // Check if game should start (both players ready)
+            if (room.status === 'ready' && room.players && room.players.length === 2 && !gameStarted) {
+                console.log('Both players ready, starting game...');
+                gameStarted = true;
+                
+                if (isHost) {
+                    // Host initializes the game
+                    setTimeout(() => {
+                        initGameAsHost(room.players);
+                    }, 500);
+                }
+            }
+            
+            // Sync game state from host
+            if (room.gameState && gameStarted) {
+                if (!isHost) {
+                    // Guest syncs from Firebase
+                    syncGameState(room.gameState);
+                }
             }
         }
-
         function sendGameState() {
-            if (!conn || conn.open === false) return;
+            if (!roomRef || !isHost) return;
 
             const stateToSync = {
                 players: gameState.players,
@@ -1882,9 +1849,8 @@
                 gameOver: gameState.gameOver
             };
 
-            conn.send({
-                type: 'gameState',
-                state: stateToSync
+            roomRef.update({ gameState: stateToSync }).catch((err) => {
+                console.error('Error syncing game state:', err);
             });
         }
 
@@ -1914,7 +1880,6 @@
                 `;
             });
         }
-
         function copyRoomCode() {
             navigator.clipboard.writeText(roomCode).then(() => {
                 showToast('Room code copied!');
@@ -1922,13 +1887,13 @@
         }
 
         function leaveGame() {
-            if (peer) {
-                peer.destroy();
-                peer = null;
-            }
-            if (conn) {
-                conn.close();
-                conn = null;
+            // Cleanup Firebase listeners
+            if (roomRef) {
+                roomRef.off();
+                if (isHost) {
+                    roomRef.remove();
+                }
+                roomRef = null;
             }
             
             // Reset everything
@@ -1949,15 +1914,16 @@
         }
 
         function playAgain() {
-            if (conn && conn.open) {
-                if (isHost) {
-                    const playerNames = gameState.players.map(p => p.name);
-                    initGameAsHost(playerNames);
-                } else {
-                    conn.send({ type: 'playAgain' });
-                }
+            if (roomRef && isHost) {
+                const playerNames = gameState.players.map(p => p.name);
+                initGameAsHost(playerNames);
                 document.getElementById('gameOverModal').classList.remove('show');
                 showToast('Starting new game...');
+            } else if (roomRef) {
+                // Guest requests play again
+                roomRef.update({ playAgainRequest: true });
+                document.getElementById('gameOverModal').classList.remove('show');
+                showToast('Waiting for host to start new game...');
             }
         }
 
