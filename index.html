@@ -1557,6 +1557,32 @@
     </div>
 
     <script>
+        // PeerJS configuration with STUN/TURN servers for better connectivity
+        const peerConfig = {
+            debug: 2,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    // Free TURN servers for NAT traversal
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
+                ]
+            }
+        };
+
         // PeerJS for WebRTC peer-to-peer connection
         let peer = null;
         let conn = null;
@@ -1645,10 +1671,8 @@
 
             showToast('Creating room...');
 
-            // Create PeerJS peer with the room code as ID
-            peer = new Peer('azul-' + roomCode, {
-                debug: 2
-            });
+            // Create PeerJS peer with the room code as ID (with STUN/TURN config)
+            peer = new Peer('azul-' + roomCode, peerConfig);
 
             peer.on('open', (id) => {
                 console.log('Host peer opened with ID:', id);
@@ -1710,11 +1734,9 @@
                 <button class="btn btn-secondary" onclick="cancelJoin()" style="width: 100%; margin-top: 10px;">Cancel</button>
             `;
 
-            // Create PeerJS peer with a unique ID
+            // Create PeerJS peer with a unique ID (with STUN/TURN config)
             const myPeerId = 'azul-guest-' + Math.random().toString(36).substr(2, 9);
-            peer = new Peer(myPeerId, {
-                debug: 2
-            });
+            peer = new Peer(myPeerId, peerConfig);
 
             peer.on('open', (id) => {
                 console.log('Guest peer opened with ID:', id);
