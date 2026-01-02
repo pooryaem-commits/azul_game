@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azul - Tile Game</title>
+    <title>Azul - Online Multiplayer</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PeerJS for WebRTC peer-to-peer connection -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
             /* Tile Colors - Rich and vibrant */
@@ -1211,9 +1213,269 @@
             0% { opacity: 1; transform: translateY(0) scale(1); }
             100% { opacity: 0; transform: translateY(-50px) scale(1.3); }
         }
+
+        /* Lobby Styles */
+        .lobby-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-primary);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .lobby-overlay.hidden {
+            display: none;
+        }
+
+        .lobby-box {
+            background: var(--bg-card);
+            padding: 50px;
+            border-radius: 24px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid var(--border-light);
+            box-shadow: 
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .lobby-box h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            color: var(--accent-gold);
+            margin-bottom: 10px;
+        }
+
+        .lobby-box h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            color: var(--text-primary);
+            margin-bottom: 30px;
+        }
+
+        .lobby-box p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .lobby-input {
+            width: 100%;
+            padding: 16px 24px;
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-family: 'Raleway', sans-serif;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .lobby-input:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 20px rgba(212, 160, 48, 0.2);
+        }
+
+        .lobby-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .lobby-status {
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .lobby-status .waiting {
+            color: var(--accent-teal);
+            animation: pulse 2s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .lobby-status .player-list {
+            margin-top: 15px;
+            text-align: left;
+        }
+
+        .lobby-status .player-item {
+            padding: 10px 15px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .lobby-status .player-item .dot {
+            width: 10px;
+            height: 10px;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: pulse 1.5s ease infinite;
+        }
+
+        .lobby-status .player-item.you {
+            border: 1px solid var(--accent-gold);
+        }
+
+        .room-code {
+            font-family: 'Cinzel', serif;
+            font-size: 2rem;
+            color: var(--accent-gold);
+            letter-spacing: 5px;
+            margin: 15px 0;
+            user-select: all;
+            cursor: pointer;
+        }
+
+        .room-code-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        .copy-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .connection-status.connected {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4CAF50;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .connection-status.disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .connection-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .your-turn-indicator {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 30px;
+            background: linear-gradient(135deg, var(--accent-gold) 0%, #c08020 100%);
+            color: #1a1a1a;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1rem;
+            z-index: 100;
+            box-shadow: 0 8px 30px rgba(212, 160, 48, 0.4);
+            animation: bounceIn 0.5s ease;
+        }
+
+        .opponent-turn-indicator {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 30px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border-radius: 50px;
+            font-weight: 500;
+            font-size: 1rem;
+            z-index: 100;
+            border: 1px solid var(--border-light);
+        }
+
+        @keyframes bounceIn {
+            0% { transform: translateX(-50%) scale(0.8); opacity: 0; }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <!-- Lobby Overlay -->
+    <div class="lobby-overlay" id="lobbyOverlay">
+        <div class="lobby-box" id="lobbyBox">
+            <h1>🎨 AZUL</h1>
+            <h2>Online Multiplayer</h2>
+            
+            <!-- Step 1: Enter Username -->
+            <div id="usernameStep">
+                <p>Enter your username to play:</p>
+                <input type="text" class="lobby-input" id="usernameInput" placeholder="Your username" maxlength="15">
+                <button class="btn btn-primary" onclick="setUsername()" style="width: 100%; margin-top: 10px;">Continue</button>
+            </div>
+
+            <!-- Step 2: Create or Join -->
+            <div id="choiceStep" style="display: none;">
+                <p>Hello, <strong id="displayUsername"></strong>!</p>
+                <button class="btn btn-primary" onclick="createRoom()" style="width: 100%; margin-bottom: 15px;">🎮 Create New Game</button>
+                <button class="btn btn-secondary" onclick="showJoinStep()" style="width: 100%;">🔗 Join Existing Game</button>
+            </div>
+
+            <!-- Step 3a: Waiting for opponent (host) -->
+            <div id="waitingStep" style="display: none;">
+                <p>Share this code with your friend:</p>
+                <div class="room-code-label">ROOM CODE</div>
+                <div class="room-code" id="roomCodeDisplay" onclick="copyRoomCode()">----</div>
+                <div class="copy-hint">Click to copy</div>
+                <div class="lobby-status">
+                    <div class="waiting">⏳ Waiting for opponent to join...</div>
+                    <div class="player-list" id="playerList"></div>
+                </div>
+            </div>
+
+            <!-- Step 3b: Join with code -->
+            <div id="joinStep" style="display: none;">
+                <p>Enter the room code:</p>
+                <input type="text" class="lobby-input" id="roomCodeInput" placeholder="XXXXXX" maxlength="6" style="text-transform: uppercase; text-align: center; letter-spacing: 5px; font-size: 1.5rem;">
+                <button class="btn btn-primary" onclick="joinRoom()" style="width: 100%; margin-top: 10px;">Join Game</button>
+                <button class="btn btn-secondary" onclick="showChoiceStep()" style="width: 100%; margin-top: 10px;">← Back</button>
+            </div>
+        </div>
+    </div>
+    <!-- Connection Status -->
+    <div class="connection-status connected" id="connectionStatus" style="display: none;">
+        <div class="dot"></div>
+        <span>Connected</span>
+    </div>
+
+    <!-- Turn Indicator -->
+    <div id="turnIndicator" style="display: none;"></div>
+
     <div class="game-container">
         <header>
             <img src="images.png" alt="AZUL" class="logo">
@@ -1245,7 +1507,7 @@
 
         <div class="controls">
             <button class="btn btn-secondary" onclick="showRules()">📖 Rules</button>
-            <button class="btn btn-primary" onclick="newGame()">🎮 New Game</button>
+            <button class="btn btn-secondary" onclick="leaveGame()">🚪 Leave Game</button>
         </div>
     </div>
 
@@ -1255,7 +1517,8 @@
             <p id="winnerText">Player 1 Wins!</p>
             <div class="winner-score" id="winnerScore">42</div>
             <p style="font-size: 1rem; opacity: 0.7;">points</p>
-            <button class="btn btn-primary" onclick="newGame()" style="margin-top: 20px;">Play Again</button>
+            <button class="btn btn-primary" onclick="leaveGame()" style="margin-top: 20px;">🚪 Leave Game</button>
+            <button class="btn btn-secondary" onclick="playAgain()" style="margin-top: 10px;">🔄 Play Again (Same Room)</button>
         </div>
     </div>
 
@@ -1294,6 +1557,17 @@
     </div>
 
     <script>
+        // PeerJS for WebRTC peer-to-peer connection
+        let peer = null;
+        let conn = null;
+
+        // Multiplayer State
+        let myUsername = '';
+        let myPlayerIndex = -1;
+        let roomCode = '';
+        let isHost = false;
+        let gameStarted = false;
+
         // Game Constants
         const COLORS = ['blue', 'yellow', 'red', 'black', 'teal'];
         const TILES_PER_COLOR = 20;
@@ -1326,8 +1600,277 @@
             isAnimating: false
         };
 
-        // Initialize Game
-        function initGame() {
+        // ==================== LOBBY FUNCTIONS ====================
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function setUsername() {
+            const input = document.getElementById('usernameInput');
+            const username = input.value.trim();
+            if (username.length < 2) {
+                showToast('Username must be at least 2 characters!');
+                return;
+            }
+            myUsername = username;
+            document.getElementById('displayUsername').textContent = username;
+            document.getElementById('usernameStep').style.display = 'none';
+            document.getElementById('choiceStep').style.display = 'block';
+        }
+
+        function showChoiceStep() {
+            document.getElementById('joinStep').style.display = 'none';
+            document.getElementById('choiceStep').style.display = 'block';
+        }
+
+        function showJoinStep() {
+            document.getElementById('choiceStep').style.display = 'none';
+            document.getElementById('joinStep').style.display = 'block';
+        }
+
+        function createRoom() {
+            roomCode = generateRoomCode();
+            isHost = true;
+            myPlayerIndex = 0;
+
+            document.getElementById('choiceStep').style.display = 'none';
+            document.getElementById('waitingStep').style.display = 'block';
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+
+            // Create PeerJS peer with the room code as ID
+            peer = new Peer('azul-' + roomCode, {
+                debug: 1
+            });
+
+            peer.on('open', (id) => {
+                console.log('Host peer opened with ID:', id);
+                updatePlayerList([myUsername]);
+                showToast('Room created! Share the code with your friend.');
+            });
+
+            peer.on('connection', (connection) => {
+                console.log('Guest connected!');
+                conn = connection;
+                setupConnection();
+            });
+
+            peer.on('error', (err) => {
+                console.error('Peer error:', err);
+                if (err.type === 'unavailable-id') {
+                    showToast('Room code already in use. Try again!');
+                    roomCode = generateRoomCode();
+                    document.getElementById('roomCodeDisplay').textContent = roomCode;
+                    peer.destroy();
+                    createRoom();
+                } else {
+                    showToast('Connection error: ' + err.type);
+                }
+            });
+        }
+
+        function joinRoom() {
+            const input = document.getElementById('roomCodeInput');
+            roomCode = input.value.trim().toUpperCase();
+            
+            if (roomCode.length !== 6) {
+                showToast('Please enter a 6-character room code!');
+                return;
+            }
+
+            isHost = false;
+            myPlayerIndex = 1;
+
+            // Create PeerJS peer
+            peer = new Peer({
+                debug: 1
+            });
+
+            peer.on('open', (id) => {
+                console.log('Guest peer opened with ID:', id);
+                
+                // Connect to host
+                conn = peer.connect('azul-' + roomCode, {
+                    reliable: true
+                });
+
+                conn.on('open', () => {
+                    console.log('Connected to host!');
+                    setupConnection();
+                    
+                    // Send username to host
+                    conn.send({
+                        type: 'join',
+                        username: myUsername
+                    });
+                });
+
+                conn.on('error', (err) => {
+                    console.error('Connection error:', err);
+                    showToast('Could not connect to room. Check the code!');
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error('Peer error:', err);
+                if (err.type === 'peer-unavailable') {
+                    showToast('Room not found! Check the code.');
+                } else {
+                    showToast('Connection error: ' + err.type);
+                }
+            });
+        }
+
+        function setupConnection() {
+            conn.on('data', (data) => {
+                handleMessage(data);
+            });
+
+            conn.on('close', () => {
+                console.log('Connection closed');
+                if (gameStarted) {
+                    showToast('Opponent disconnected!');
+                    updateConnectionStatus(false);
+                }
+            });
+
+            updateConnectionStatus(true);
+        }
+
+        function handleMessage(data) {
+            console.log('Received:', data.type);
+
+            switch (data.type) {
+                case 'join':
+                    // Host receives this when guest joins
+                    if (isHost) {
+                        const guestUsername = data.username;
+                        updatePlayerList([myUsername, guestUsername]);
+                        
+                        // Start the game
+                        setTimeout(() => {
+                            initGameAsHost([myUsername, guestUsername]);
+                        }, 500);
+                    }
+                    break;
+
+                case 'gameState':
+                    // Both players receive game state updates
+                    syncGameState(data.state);
+                    break;
+
+                case 'playAgain':
+                    // Host receives request to play again
+                    if (isHost && gameState.gameOver) {
+                        const playerNames = gameState.players.map(p => p.name);
+                        initGameAsHost(playerNames);
+                    }
+                    break;
+            }
+        }
+
+        function sendGameState() {
+            if (!conn || conn.open === false) return;
+
+            const stateToSync = {
+                players: gameState.players,
+                currentPlayer: gameState.currentPlayer,
+                factories: gameState.factories,
+                centerPool: gameState.centerPool,
+                tileBag: gameState.tileBag,
+                discardPile: gameState.discardPile,
+                round: gameState.round,
+                firstPlayerToken: gameState.firstPlayerToken,
+                gameOver: gameState.gameOver
+            };
+
+            conn.send({
+                type: 'gameState',
+                state: stateToSync
+            });
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            if (connected) {
+                status.className = 'connection-status connected';
+                status.innerHTML = '<div class="dot"></div><span>Connected</span>';
+            } else {
+                status.className = 'connection-status disconnected';
+                status.innerHTML = '<div class="dot"></div><span>Disconnected</span>';
+            }
+            status.style.display = 'flex';
+        }
+
+        function updatePlayerList(players) {
+            const listEl = document.getElementById('playerList');
+            listEl.innerHTML = '';
+            
+            players.forEach((player, index) => {
+                const isYou = player === myUsername;
+                listEl.innerHTML += `
+                    <div class="player-item ${isYou ? 'you' : ''}">
+                        <div class="dot"></div>
+                        <span>${player} ${isYou ? '(You)' : ''}</span>
+                    </div>
+                `;
+            });
+        }
+
+        function copyRoomCode() {
+            navigator.clipboard.writeText(roomCode).then(() => {
+                showToast('Room code copied!');
+            });
+        }
+
+        function leaveGame() {
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            if (conn) {
+                conn.close();
+                conn = null;
+            }
+            
+            // Reset everything
+            gameStarted = false;
+            roomCode = '';
+            myPlayerIndex = -1;
+            
+            document.getElementById('gameOverModal').classList.remove('show');
+            document.getElementById('lobbyOverlay').classList.remove('hidden');
+            document.getElementById('connectionStatus').style.display = 'none';
+            document.getElementById('turnIndicator').style.display = 'none';
+            
+            // Reset lobby UI
+            document.getElementById('usernameStep').style.display = 'block';
+            document.getElementById('choiceStep').style.display = 'none';
+            document.getElementById('waitingStep').style.display = 'none';
+            document.getElementById('joinStep').style.display = 'none';
+        }
+
+        function playAgain() {
+            if (conn && conn.open) {
+                if (isHost) {
+                    const playerNames = gameState.players.map(p => p.name);
+                    initGameAsHost(playerNames);
+                } else {
+                    conn.send({ type: 'playAgain' });
+                }
+                document.getElementById('gameOverModal').classList.remove('show');
+                showToast('Starting new game...');
+            }
+        }
+
+        // ==================== GAME INITIALIZATION ====================
+
+        function initGameAsHost(playerNames) {
             // Create tile bag
             gameState.tileBag = [];
             COLORS.forEach(color => {
@@ -1337,10 +1880,10 @@
             });
             shuffleArray(gameState.tileBag);
 
-            // Initialize players
+            // Initialize players with actual usernames
             gameState.players = [
-                createPlayer('Player 1'),
-                createPlayer('Player 2')
+                createPlayer(playerNames[0]),
+                createPlayer(playerNames[1])
             ];
 
             // Reset game state
@@ -1356,9 +1899,78 @@
             // Fill factories
             fillFactories();
 
+            // Hide lobby, show game
+            document.getElementById('lobbyOverlay').classList.add('hidden');
+            document.getElementById('connectionStatus').style.display = 'flex';
+            gameStarted = true;
+
+            // Send game state to peer
+            sendGameState();
+
             // Render
             render();
+            updateTurnIndicator();
         }
+
+        function syncGameState(remoteState) {
+            // Don't sync if we're animating
+            if (gameState.isAnimating) return;
+
+            // Update local state from remote
+            gameState.players = remoteState.players;
+            gameState.currentPlayer = remoteState.currentPlayer;
+            gameState.factories = remoteState.factories;
+            gameState.centerPool = remoteState.centerPool || [];
+            gameState.tileBag = remoteState.tileBag;
+            gameState.discardPile = remoteState.discardPile || [];
+            gameState.round = remoteState.round;
+            gameState.firstPlayerToken = remoteState.firstPlayerToken;
+            gameState.gameOver = remoteState.gameOver;
+
+            // Clear local selection (each player has their own)
+            gameState.selectedTiles = null;
+            gameState.selectedSource = null;
+            document.getElementById('deselectBtn').classList.remove('show');
+
+            // Hide lobby if not already hidden
+            document.getElementById('lobbyOverlay').classList.add('hidden');
+            document.getElementById('connectionStatus').style.display = 'flex';
+
+            // Render
+            render();
+            updateTurnIndicator();
+
+            // Check for game over
+            if (gameState.gameOver) {
+                showGameOver();
+            }
+        }
+
+        function syncToFirebase() {
+            // Use PeerJS to send game state
+            sendGameState();
+        }
+
+        function updateTurnIndicator() {
+            const indicator = document.getElementById('turnIndicator');
+            const isMyTurnNow = gameState.currentPlayer === myPlayerIndex;
+            const currentPlayerName = gameState.players[gameState.currentPlayer]?.name || 'Player';
+
+            if (isMyTurnNow) {
+                indicator.className = 'your-turn-indicator';
+                indicator.innerHTML = '🎯 Your Turn!';
+            } else {
+                indicator.className = 'opponent-turn-indicator';
+                indicator.innerHTML = `⏳ Waiting for ${currentPlayerName}...`;
+            }
+            indicator.style.display = 'block';
+        }
+
+        function isMyTurn() {
+            return gameState.currentPlayer === myPlayerIndex;
+        }
+
+        // ==================== ORIGINAL GAME FUNCTIONS ====================
 
         function createPlayer(name) {
             return {
@@ -1478,11 +2090,15 @@
 
             gameState.players.forEach((player, index) => {
                 const boardEl = document.createElement('div');
-                boardEl.className = `player-board ${index === gameState.currentPlayer ? 'active' : ''}`;
+                const isCurrentTurn = index === gameState.currentPlayer;
+                const isMyBoard = index === myPlayerIndex;
+                boardEl.className = `player-board ${isCurrentTurn ? 'active' : ''}`;
+                
+                const youLabel = isMyBoard ? ' (You)' : '';
                 
                 boardEl.innerHTML = `
                     <div class="player-header">
-                        <div class="player-name">${player.name} ${player.hasFirstPlayerToken ? '👑' : ''}</div>
+                        <div class="player-name">${player.name}${youLabel} ${player.hasFirstPlayerToken ? '👑' : ''}</div>
                         <div class="player-score">${player.score}</div>
                     </div>
                     <div class="board-content">
@@ -1570,12 +2186,18 @@
 
         function updateGameInfo() {
             document.getElementById('roundNum').textContent = gameState.round;
-            document.getElementById('currentPlayer').textContent = gameState.players[gameState.currentPlayer].name;
+            document.getElementById('currentPlayer').textContent = gameState.players[gameState.currentPlayer]?.name || 'Player';
         }
 
         // Game Logic
         function selectTile(sourceIndex, color, sourceType) {
             if (gameState.gameOver || gameState.isAnimating) return;
+
+            // Check if it's this player's turn
+            if (!isMyTurn()) {
+                showToast("Wait for your turn!");
+                return;
+            }
 
             // If clicking the same selection, deselect (unhighlight)
             if (gameState.selectedTiles && 
@@ -1601,7 +2223,7 @@
             gameState.selectedTiles = tiles;
             gameState.selectedSource = { index: sourceIndex, type: sourceType, color: color };
 
-            showToast(`Selected ${tiles.length} ${color} tile(s). Click a row to place, or click again to cancel.`);
+            showToast(`Selected ${tiles.length} ${color} tile(s). Click a row to place.`);
             document.getElementById('deselectBtn').classList.add('show');
             render();
         }
@@ -1643,6 +2265,12 @@
                 if (!gameState.isAnimating) {
                     showToast('First select tiles from a factory or center!');
                 }
+                return;
+            }
+
+            // Check if it's this player's turn
+            if (!isMyTurn()) {
+                showToast("Wait for your turn!");
                 return;
             }
 
@@ -1690,26 +2318,45 @@
                 const tilesToPlace = tiles.slice(0, spaceLeft);
                 const overflow = tiles.slice(spaceLeft);
 
-                // Animate tiles placement
-                animateTilePlacement(player, rowIndex, tilesToPlace, overflow, () => {
-                    // Check if round is over
-                    if (isRoundOver()) {
-                        endRound();
+                // Place tiles immediately (no animation for multiplayer sync)
+                tilesToPlace.forEach(tile => {
+                    player.patternLines[rowIndex].push(tile);
+                });
+                overflow.forEach(tile => {
+                    if (player.floorLine.length < 7) {
+                        player.floorLine.push(tile);
                     } else {
-                        nextPlayer();
-                        render();
+                        gameState.discardPile.push(tile);
                     }
                 });
+
+                // Check if round is over
+                if (isRoundOver()) {
+                    endRound();
+                } else {
+                    nextPlayer();
+                    syncToFirebase();
+                    render();
+                    updateTurnIndicator();
+                }
             } else {
                 // Placing directly to floor
-                animateFloorPlacement(player, tiles, () => {
-                    if (isRoundOver()) {
-                        endRound();
+                tiles.forEach(tile => {
+                    if (player.floorLine.length < 7) {
+                        player.floorLine.push(tile);
                     } else {
-                        nextPlayer();
-                        render();
+                        gameState.discardPile.push(tile);
                     }
                 });
+
+                if (isRoundOver()) {
+                    endRound();
+                } else {
+                    nextPlayer();
+                    syncToFirebase();
+                    render();
+                    updateTurnIndicator();
+                }
             }
         }
 
@@ -1794,23 +2441,93 @@
         }
 
         function endRound() {
+            // Only host processes the round end to prevent conflicts
+            if (!isHost) {
+                // Non-host waits for state update from host
+                return;
+            }
+
             gameState.isAnimating = true;
             
-            // Show scoring overlay
-            const overlay = document.getElementById('scoringOverlay');
-            const scoringText = document.getElementById('scoringText');
-            const scoringDetails = document.getElementById('scoringDetails');
-            
-            overlay.classList.add('show');
-            scoringText.textContent = '✨ Round Complete ✨';
-            scoringDetails.textContent = 'Moving tiles to the wall...';
-
-            setTimeout(() => {
-                scoringText.textContent = '📊 Scoring...';
-                performScoringAnimation(overlay);
-            }, 1500);
+            // Process scoring immediately for multiplayer
+            processRoundScoring();
         }
 
+        function processRoundScoring() {
+            // Process all wall placements
+            gameState.players.forEach((player, playerIndex) => {
+                for (let row = 0; row < 5; row++) {
+                    const maxSize = row + 1;
+                    if (player.patternLines[row].length === maxSize) {
+                        const color = player.patternLines[row][0];
+                        const col = WALL_PATTERN[row].indexOf(color);
+                        
+                        // Place tile on wall
+                        player.wall[row][col] = true;
+
+                        // Score the tile
+                        const points = scoreTile(player.wall, row, col);
+                        player.score += points;
+
+                        // Discard extra tiles
+                        for (let i = 1; i < maxSize; i++) {
+                            gameState.discardPile.push(color);
+                        }
+
+                        // Clear pattern line
+                        player.patternLines[row] = [];
+                    }
+                }
+
+                // Apply floor penalties
+                let penalty = 0;
+                player.floorLine.forEach((tile, index) => {
+                    if (index < FLOOR_PENALTIES.length) {
+                        penalty += FLOOR_PENALTIES[index];
+                    }
+                    if (tile !== 'first') {
+                        gameState.discardPile.push(tile);
+                    }
+                });
+
+                player.score += penalty;
+                player.score = Math.max(0, player.score);
+                player.floorLine = [];
+            });
+
+            // Check for game end
+            if (checkGameEnd()) {
+                endGame();
+                return;
+            }
+
+            // Start new round
+            gameState.round++;
+            gameState.firstPlayerToken = true;
+
+            // Find first player for next round
+            const firstPlayerIndex = gameState.players.findIndex(p => p.hasFirstPlayerToken);
+            if (firstPlayerIndex !== -1) {
+                gameState.currentPlayer = firstPlayerIndex;
+                gameState.players.forEach(p => p.hasFirstPlayerToken = false);
+            }
+
+            // Fill factories
+            fillFactories();
+            
+            gameState.isAnimating = false;
+
+            // Sync to Firebase
+            syncToFirebase();
+
+            // Render
+            render();
+            updateTurnIndicator();
+            
+            showToast(`🎲 Round ${gameState.round} begins!`);
+        }
+
+        // Keep performScoringAnimation for visual purposes (not used in multiplayer)
         function performScoringAnimation(overlay) {
             const scoringDetails = document.getElementById('scoringDetails');
             let playerScores = [];
@@ -2050,19 +2767,28 @@
 
             render();
 
+            // Sync final state
+            syncToFirebase();
+
             // Show winner
-            const winner = gameState.players.reduce((a, b) => a.score > b.score ? a : b);
-            document.getElementById('winnerText').textContent = `${winner.name} Wins!`;
-            document.getElementById('winnerScore').textContent = winner.score;
-            document.getElementById('gameOverModal').classList.add('show');
+            showGameOver();
         }
 
-        function newGame() {
-            document.getElementById('gameOverModal').classList.remove('show');
-            document.getElementById('scoringOverlay').classList.remove('show');
-            document.getElementById('deselectBtn').classList.remove('show');
-            initGame();
-            showToast('New game started!');
+        function showGameOver() {
+            const winner = gameState.players.reduce((a, b) => a.score > b.score ? a : b);
+            const loser = gameState.players.find(p => p !== winner);
+            
+            // Check for tie
+            let winnerText = '';
+            if (winner.score === loser.score) {
+                winnerText = "It's a Tie!";
+            } else {
+                winnerText = `🎉 ${winner.name} Wins! 🎉`;
+            }
+            
+            document.getElementById('winnerText').textContent = winnerText;
+            document.getElementById('winnerScore').textContent = winner.score;
+            document.getElementById('gameOverModal').classList.add('show');
         }
 
         function showRules() {
@@ -2096,8 +2822,16 @@
             });
         });
 
-        // Start the game
-        initGame();
+        // Handle Enter key for inputs
+        document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') setUsername();
+        });
+        document.getElementById('roomCodeInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinRoom();
+        });
+
+        // Show lobby on page load (game starts when both players join)
+        console.log('Azul Multiplayer ready! Waiting for players to join...');
     </script>
 </body>
 </html>
