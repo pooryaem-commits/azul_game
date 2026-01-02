@@ -1899,14 +1899,14 @@
                     }
                 });
 
-                // Timeout for connection - 30 seconds
+                // Timeout for connection - 120 seconds
                 setTimeout(() => {
                     if (!conn || !conn.open) {
-                        console.log('Connection timeout after 30 seconds');
+                        console.log('Connection timeout after 120 seconds');
                         showToast('Connection timeout. Possible causes:\n- Wrong room code\n- Host left\n- Firewall blocking connection');
                         cancelJoin();
                     }
-                }, 30000);
+                }, 120000);
 
             } catch (err) {
                 console.error('Error joining room:', err);

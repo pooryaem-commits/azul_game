@@ -177,7 +177,7 @@ For reliable connections across different networks (NAT traversal), the game use
 
 ### Connection Timeout
 
-The game uses a **30-second timeout** for connection attempts. If connection fails:
+The game uses a **120-second timeout** for connection attempts. If connection fails:
 - Check if room code is correct
 - Ensure host hasn't left the room
 - Try disabling VPN if using one
@@ -243,7 +243,7 @@ The game ends when a player completes a horizontal row on their wall. The player
 - **Frontend**: Vanilla HTML, CSS, JavaScript
 - **Hosting**: GitHub Pages
 - **Multiplayer**: PeerJS (WebRTC) with STUN/TURN servers
-- **Connection Timeout**: 30 seconds
+- **Connection Timeout**: 120 seconds
 - **No Dependencies**: Single HTML file (~3000 lines)
 
 ## Contributing
