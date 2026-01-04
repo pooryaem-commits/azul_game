@@ -1731,6 +1731,44 @@
         }
 
         function setupConnection(connection) {
+            // Log ICE connection state changes
+            connection.peerConnection.oniceconnectionstatechange = () => {
+                const state = connection.peerConnection.iceConnectionState;
+                console.log('ICE connection state:', state);
+                if (state === 'checking') {
+                    console.log('Trying to establish connection...');
+                } else if (state === 'connected' || state === 'completed') {
+                    console.log('Connection successful!');
+                } else if (state === 'failed') {
+                    console.error('ICE connection failed - NAT/firewall issue');
+                    showToast('Connection failed. Network or firewall blocking. Try VPN or different network.');
+                } else if (state === 'disconnected') {
+                    console.warn('ICE disconnected');
+                }
+            };
+
+            // Log ICE gathering state
+            connection.peerConnection.onicegatheringstatechange = () => {
+                console.log('ICE gathering state:', connection.peerConnection.iceGatheringState);
+            };
+
+            // Log each ICE candidate to see what connection types are available
+            connection.peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    const candidate = event.candidate.candidate;
+                    console.log('ICE candidate:', candidate);
+                    
+                    // Check if TURN is being used
+                    if (candidate.includes('relay')) {
+                        console.log('✓ TURN relay candidate found - will use relay server');
+                    } else if (candidate.includes('srflx')) {
+                        console.log('✓ STUN candidate found - direct connection possible');
+                    } else if (candidate.includes('host')) {
+                        console.log('Host candidate (local network)');
+                    }
+                }
+            };
+
             connection.on('open', () => {
                 console.log('Connection established!');
                 updateConnectionStatus(true);
