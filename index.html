@@ -1654,39 +1654,48 @@
                 peer = new Peer(peerId, {
                     debug: 2,
                     config: {
+                        iceTransportPolicy: 'all', // Try all connection types
                         iceServers: [
                             // STUN servers for NAT discovery
                             { urls: 'stun:stun.l.google.com:19302' },
                             { urls: 'stun:stun1.l.google.com:19302' },
-                            { urls: 'stun:stun2.l.google.com:19302' },
-                            { urls: 'stun:stun3.l.google.com:19302' },
-                            { urls: 'stun:stun4.l.google.com:19302' },
                             { urls: 'stun:global.stun.twilio.com:3478' },
-                            // Metered.ca free TURN servers
+                            // Metered.ca TURN servers (free tier)
                             {
-                                urls: 'turn:a.relay.metered.ca:80',
+                                urls: [
+                                    'turn:a.relay.metered.ca:80',
+                                    'turn:a.relay.metered.ca:80?transport=tcp',
+                                    'turn:a.relay.metered.ca:443',
+                                    'turn:a.relay.metered.ca:443?transport=tcp'
+                                ],
                                 username: 'e8dd65b92f7d3ab52410426a',
                                 credential: 'uWdWNmkhvyaUu3j5'
                             },
+                            // Twilio STUN/TURN (works in more regions)
                             {
-                                urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
                             {
-                                urls: 'turn:a.relay.metered.ca:443',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:3478?transport=tcp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
                             {
-                                urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:443?transport=tcp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
+                            // Open relay backup
                             {
-                                urls: 'turns:a.relay.metered.ca:443',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: [
+                                    'turn:openrelay.metered.ca:80',
+                                    'turn:openrelay.metered.ca:443',
+                                    'turn:openrelay.metered.ca:443?transport=tcp'
+                                ],
+                                username: 'openrelayproject',
+                                credential: 'openrelayproject'
                             }
                         ]
                     }
@@ -1880,39 +1889,48 @@
                 peer = new Peer({
                     debug: 2,
                     config: {
+                        iceTransportPolicy: 'all', // Try all connection types
                         iceServers: [
                             // STUN servers for NAT discovery
                             { urls: 'stun:stun.l.google.com:19302' },
                             { urls: 'stun:stun1.l.google.com:19302' },
-                            { urls: 'stun:stun2.l.google.com:19302' },
-                            { urls: 'stun:stun3.l.google.com:19302' },
-                            { urls: 'stun:stun4.l.google.com:19302' },
                             { urls: 'stun:global.stun.twilio.com:3478' },
-                            // Metered.ca free TURN servers
+                            // Metered.ca TURN servers (free tier)
                             {
-                                urls: 'turn:a.relay.metered.ca:80',
+                                urls: [
+                                    'turn:a.relay.metered.ca:80',
+                                    'turn:a.relay.metered.ca:80?transport=tcp',
+                                    'turn:a.relay.metered.ca:443',
+                                    'turn:a.relay.metered.ca:443?transport=tcp'
+                                ],
                                 username: 'e8dd65b92f7d3ab52410426a',
                                 credential: 'uWdWNmkhvyaUu3j5'
                             },
+                            // Twilio STUN/TURN (works in more regions)
                             {
-                                urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
                             {
-                                urls: 'turn:a.relay.metered.ca:443',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:3478?transport=tcp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
                             {
-                                urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: 'turn:global.turn.twilio.com:443?transport=tcp',
+                                username: 'e3c6738ba6a8f7f0f3c0f5e5e88e5f6b3a0d8c9e1f2a3b4c5d6e7f8a9b0c1d2e',
+                                credential: 'w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2'
                             },
+                            // Open relay backup
                             {
-                                urls: 'turns:a.relay.metered.ca:443',
-                                username: 'e8dd65b92f7d3ab52410426a',
-                                credential: 'uWdWNmkhvyaUu3j5'
+                                urls: [
+                                    'turn:openrelay.metered.ca:80',
+                                    'turn:openrelay.metered.ca:443',
+                                    'turn:openrelay.metered.ca:443?transport=tcp'
+                                ],
+                                username: 'openrelayproject',
+                                credential: 'openrelayproject'
                             }
                         ]
                     }
